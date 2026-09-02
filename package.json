@@ -1,0 +1,14 @@
+{
+  "name": "ice-candle-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Fonctions serveur pour Ice Candle Cannes (paiement Stripe, conversion photo → dessin via Replicate).",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "stripe": "^22.0.0",
+    "@neondatabase/serverless": "^1.1.0",
+    "bcryptjs": "^3.0.3"
+  }
+}
