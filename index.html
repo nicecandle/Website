@@ -799,12 +799,7 @@
             <button type="button" id="fileRemove" aria-label="Retirer le motif">✕</button>
           </div>
           <div class="ai-status" id="photoStatus" style="margin-top:10px;"><span class="spinner" id="photoSpinner"></span><span id="photoStatusText"></span></div>
-
-          <div class="mini-field" id="logoSizeField" style="margin-top:18px;">
-            <div class="mini-label">Taille du logo <span id="logoSizeValue">3 cm</span></div>
-            <input type="range" id="logoSizeRange" min="1" max="3" step="0.5" value="3" aria-label="Taille du logo" disabled>
-            <p class="field__hint">Zone de gravure : 60 × 60 mm — texte centré en haut, logo centré en bas (30 mm de diamètre maximum).</p>
-          </div>
+          <p class="field__hint" style="margin-top:12px;">Zone de gravure : 60 × 60 mm — texte centré en haut, logo centré en bas, occupant toute la largeur disponible.</p>
         </div>
 
         <div class="cta-row">
@@ -1063,8 +1058,7 @@
 
   var state = {
     color: COLORS[0], text:'', motifType:'none', aiSeed:0,
-    fontId:'cormorant', fontSize:52, italic:true, bold:false, caps:false,
-    logoSize:3
+    fontId:'cormorant', fontSize:52, italic:true, bold:false, caps:false
   };
   var cart = [];
   var motifImgEl = null;
@@ -1265,7 +1259,6 @@
   var ZONE_W_PX = ENGRAVE_ZONE_MM * PX_PER_MM_X;
   var ZONE_H_PX = ENGRAVE_ZONE_MM * PX_PER_MM_Y;
   var ZONE_HALF_H_PX = ZONE_H_PX / 2;
-  var LOGO_MAX_DIAMETER_MM = ENGRAVE_ZONE_MM / 2; // moitié basse : 60 x 30 mm → cercle max = 30 mm
 
   function drawImageCover(ctx, img, x, y, w, h){
     var ir = img.width / img.height, tr = w / h, sx, sy, sw, sh;
@@ -1344,43 +1337,38 @@
       ctx.restore();
     }
 
-    // Zone logo (moitié basse) : cercle réel jusqu'à 30 mm de diamètre.
-    // Le verre n'ayant pas la même échelle px/mm en largeur qu'en hauteur,
-    // on dessine une ellipse dans le canevas pour obtenir un vrai cercle
-    // une fois le motif posé sur la courbe du verre.
-    var maxDiaMm = Math.min(LOGO_MAX_DIAMETER_MM, state.logoSize * 10);
-    var effRX = (maxDiaMm/2) * PX_PER_MM_X;
-    var effRY = (maxDiaMm/2) * PX_PER_MM_Y;
-    var guideRX = (LOGO_MAX_DIAMETER_MM/2) * PX_PER_MM_X;
-    var guideRY = (LOGO_MAX_DIAMETER_MM/2) * PX_PER_MM_Y;
+    // Zone logo (moitié basse) : occupe tout le rectangle disponible
+    // (60 x 30 mm), plus de forme ronde imposée.
+    var logoX = zoneLeft, logoY = zoneMid, logoW = ZONE_W_PX, logoH = ZONE_HALF_H_PX;
+    var logoCxRect = logoX + logoW/2;
 
     if(state.motifType === 'image' && motifImgEl){
       ctx.save();
-      ctx.beginPath(); ctx.ellipse(zoneCx,logoCy,effRX,effRY,0,0,Math.PI*2); ctx.clip();
-      drawImageCover(ctx, motifImgEl, zoneCx-effRX, logoCy-effRY, effRX*2, effRY*2);
+      ctx.beginPath(); ctx.rect(logoX, logoY, logoW, logoH); ctx.clip();
+      drawImageCover(ctx, motifImgEl, logoX, logoY, logoW, logoH);
       ctx.restore();
     } else if(state.motifType === 'pdf'){
       ctx.save();
       ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([4,5]); ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.ellipse(zoneCx,logoCy,effRX,effRY,0,0,Math.PI*2); ctx.stroke();
+      ctx.strokeRect(logoX, logoY, logoW, logoH);
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.font = "600 " + Math.max(13, Math.min(effRX,effRY)*0.42) + "px 'IBM Plex Mono', monospace";
+      ctx.font = "600 " + Math.max(13, Math.min(logoW,logoH)*0.28) + "px 'IBM Plex Mono', monospace";
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('PDF', zoneCx, logoCy);
+      ctx.fillText('PDF', logoCxRect, logoCy);
       ctx.restore();
     } else if(state.motifType === 'ai'){
       ctx.save();
-      ctx.beginPath(); ctx.ellipse(zoneCx,logoCy,effRX,effRY,0,0,Math.PI*2); ctx.clip();
-      drawGeneratedMotif(ctx, zoneCx, logoCy, effRX, effRY, state.aiSeed);
+      ctx.beginPath(); ctx.rect(logoX, logoY, logoW, logoH); ctx.clip();
+      drawGeneratedMotif(ctx, logoCxRect, logoCy, logoW/2, logoH/2, state.aiSeed);
       ctx.restore();
     } else {
       ctx.save();
       ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([3,4]); ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.ellipse(zoneCx,logoCy,guideRX,guideRY,0,0,Math.PI*2); ctx.stroke();
+      ctx.strokeRect(logoX, logoY, logoW, logoH);
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.font = "500 13px 'IBM Plex Mono', monospace";
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('MOTIF', zoneCx, logoCy);
+      ctx.fillText('MOTIF', logoCxRect, logoCy);
       ctx.restore();
     }
 
@@ -1518,23 +1506,6 @@
   tabAi.addEventListener('click', function(){ setTab('ai'); });
   tabFile.addEventListener('click', function(){ setTab('file'); });
 
-  /* ===================== Logo size control ===================== */
-  var logoSizeRange = document.getElementById('logoSizeRange');
-  var logoSizeValue = document.getElementById('logoSizeValue');
-  function formatCm(v){
-    var s = (Math.round(v*10)/10).toString().replace('.', ',');
-    return s + ' cm';
-  }
-  logoSizeRange.addEventListener('input', function(){
-    state.logoSize = Number(logoSizeRange.value);
-    logoSizeValue.textContent = formatCm(state.logoSize);
-    updateEngravingTexture();
-  });
-  function refreshLogoSizeControl(){
-    logoSizeRange.disabled = (state.motifType === 'none');
-  }
-  refreshLogoSizeControl();
-
   /* ===================== AI motif generator (client-side demo) ===================== */
   var aiGenerateBtn = document.getElementById('aiGenerateBtn');
   var aiPrompt = document.getElementById('aiPrompt');
@@ -1559,7 +1530,6 @@
       state.aiSeed = hashString(prompt);
       motifImgEl = null;
       resetFileChip();
-      refreshLogoSizeControl();
       updateEngravingTexture();
       aiGenerateBtn.disabled = false;
       aiSpinner.classList.remove('show');
@@ -1734,7 +1704,6 @@
     if(file.type === 'application/pdf'){
       motifImgEl = null;
       state.motifType = 'pdf';
-      refreshLogoSizeControl();
       updateEngravingTexture();
       showToast('PDF ajouté à la gravure.');
     } else {
@@ -1746,7 +1715,6 @@
           // Aperçu instantané (algorithme local), puis tentative d'amélioration via l'API.
           motifImgEl = photoToLineArt(img);
           state.motifType = 'image';
-          refreshLogoSizeControl();
           updateEngravingTexture();
           showToast('Photo convertie en dessin pour la gravure.');
           upgradePhotoViaAPI(dataUrl);
@@ -1768,7 +1736,6 @@
     aiStatusText.textContent = '';
     photoStatusTextEl.textContent = '';
     photoSpinnerEl.classList.remove('show');
-    refreshLogoSizeControl();
     updateEngravingTexture();
   });
 
