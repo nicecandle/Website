@@ -1386,9 +1386,10 @@
 
     // Repère de la zone de gravure totale (60 x 60 mm) + séparation texte / logo.
     ctx.save();
-    ctx.strokeStyle = 'rgba(255,255,255,0.2)'; ctx.setLineDash([3,4]); ctx.lineWidth = 1;
+    ctx.strokeStyle = '#FF3B30'; ctx.setLineDash([]); ctx.lineWidth = 3;
     ctx.strokeRect(zoneLeft, zoneTop, ZONE_W_PX, ZONE_H_PX);
     ctx.beginPath();
+    ctx.setLineDash([6,5]); ctx.lineWidth = 2;
     ctx.moveTo(zoneLeft, zoneMid); ctx.lineTo(zoneRight, zoneMid);
     ctx.stroke();
     ctx.restore();
@@ -1868,8 +1869,8 @@
       engraveTexture = new THREE.CanvasTexture(engraveCanvas);
       engraveTexture.wrapS = THREE.RepeatWrapping;
       engraveTexture.offset.x = 0.5; // centre le contenu du canevas sur la face avant
-      var engraveMat = new THREE.MeshBasicMaterial({ map: engraveTexture, transparent:true, depthWrite:false, side: THREE.DoubleSide });
-      var engraveGeo = new THREE.CylinderGeometry(GLASS_WAIST_R + 0.04, GLASS_BASE_R + 0.04, DECAL_HEIGHT_CM, 48, 1, true);
+      var engraveMat = new THREE.MeshBasicMaterial({ map: engraveTexture, transparent:true, depthWrite:false, depthTest:false, side: THREE.DoubleSide });
+      var engraveGeo = new THREE.CylinderGeometry(GLASS_WAIST_R + 0.15, GLASS_BASE_R + 0.15, DECAL_HEIGHT_CM, 48, 1, true);
       engraveMesh = new THREE.Mesh(engraveGeo, engraveMat);
       engraveMesh.position.y = DECAL_CENTER_Y;
       engraveMesh.renderOrder = 2;
