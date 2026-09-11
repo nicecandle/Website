@@ -50,8 +50,13 @@ CREATE TABLE IF NOT EXISTS order_items (
   engraved_text     TEXT,
   motif_description TEXT,
   unit_price        NUMERIC(10,2) NOT NULL,
-  quantity          INTEGER NOT NULL DEFAULT 1
+  quantity          INTEGER NOT NULL DEFAULT 1,
+  engraving_file     TEXT
 );
+
+-- Si la table order_items existait déjà (site déployé avant cette mise à
+-- jour), la ligne ci-dessous ajoute la colonne manquante sans rien casser.
+ALTER TABLE order_items ADD COLUMN IF NOT EXISTS engraving_file TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_orders_customer ON orders(customer_id);
 CREATE INDEX IF NOT EXISTS idx_order_items_order ON order_items(order_id);

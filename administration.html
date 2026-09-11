@@ -120,6 +120,13 @@
   .order-mini__head{ display:flex; justify-content:space-between; color:var(--mist); font-family:var(--mono); font-size:11px; margin-bottom:8px; }
   .order-mini__item{ display:flex; justify-content:space-between; padding:4px 0; }
   .order-mini__total{ margin-top:8px; padding-top:8px; border-top:1px solid var(--line); display:flex; justify-content:space-between; font-family:var(--mono); color:var(--flame-2); }
+  .engrave-dl-row{ margin:2px 0 6px; }
+  .engrave-dl{
+    display:inline-block; font-family:var(--mono); font-size:10.5px; color:var(--ok);
+    text-decoration:none; border:1px solid rgba(143,191,159,0.35); border-radius:999px;
+    padding:4px 10px; background:rgba(143,191,159,0.08);
+  }
+  .engrave-dl:hover{ background:rgba(143,191,159,0.16); }
 
   #toast{
     position:fixed; left:50%; bottom:28px; transform:translate(-50%,20px);
@@ -678,7 +685,11 @@
         } else {
           orders.forEach(function(order){
             var itemsHtml = (order.items||[]).map(function(it){
-              return '<div class="order-mini__item"><span>'+escapeHtml(it.colorName||'')+' × '+it.qty+(it.text ? ' — « '+escapeHtml(it.text)+' »' : '')+'</span><span>'+formatPrice((it.unitPrice||0)*(it.qty||1))+'</span></div>';
+              var line = '<div class="order-mini__item"><span>'+escapeHtml(it.colorName||'')+' × '+it.qty+(it.text ? ' — « '+escapeHtml(it.text)+' »' : '')+'</span><span>'+formatPrice((it.unitPrice||0)*(it.qty||1))+'</span></div>';
+              if(it.engravingFile){
+                line += '<div class="engrave-dl-row"><a class="engrave-dl" href="data:image/svg+xml,'+encodeURIComponent(it.engravingFile)+'" download="gravure-commande-'+order.id+'.svg">⬇ Fichier de gravure (SVG, prêt pour xTool Studio)</a></div>';
+              }
+              return line;
             }).join('');
             var statusLabel = order.status === 'paid' ? 'Payée (Stripe)' : order.status === 'pending' ? 'En attente de paiement' : order.status;
             var statusColor = order.status === 'paid' ? 'var(--ok)' : 'var(--flame-2)';

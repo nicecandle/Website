@@ -275,6 +275,31 @@
   }
   .preview-price strong{ color:var(--flame-2); font-size:15px; }
 
+  .preview-tabs{
+    display:flex; gap:4px; background:rgba(255,255,255,0.06); border:1px solid var(--line-strong);
+    border-radius:999px; padding:4px; margin-bottom:18px;
+  }
+  .preview-tab{
+    border:none; background:none; padding:8px 16px; border-radius:999px;
+    font-size:12.5px; font-weight:600; color:var(--mist); cursor:pointer;
+    transition:background .2s, color .2s;
+  }
+  .preview-tab.active{ background:var(--panel-3); color:var(--frost); }
+
+  .stage-real{
+    width:min(300px, 62vw); height:380px; border-radius:20px; overflow:hidden;
+    display:flex; align-items:center; justify-content:center;
+    background:radial-gradient(circle at 50% 30%, rgba(255,255,255,0.03), transparent 70%);
+  }
+  .stage-real__pending{
+    text-align:center; padding:0 26px; color:var(--mist);
+  }
+  .stage-real__pending svg{ width:34px; height:34px; margin:0 auto 16px; color:var(--mist-dim); }
+  .stage-real__pending svg path, .stage-real__pending svg rect, .stage-real__pending svg circle{ stroke:var(--mist-dim); }
+  .stage-real__pending p{ font-size:12.5px; line-height:1.6; }
+  .stage-real__pending strong{ display:block; color:var(--frost); font-size:13.5px; margin-bottom:6px; }
+  #stageRealCanvas{ width:100%; height:100%; object-fit:contain; }
+
   .stage3d{
     position:relative; width:min(300px, 62vw); height:380px;
     border-radius:20px; overflow:hidden; cursor:grab;
@@ -398,6 +423,47 @@
   }
   .style-toggle:hover{ border-color:var(--flame-2); }
   .style-toggle.active{ border-color:var(--flame-2); color:var(--flame-2); background:var(--panel-3); }
+
+  /* ---------- Free-form design editor ---------- */
+  .editor-toolbar{ display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+  .btn--sm{ padding:9px 16px; font-size:12.5px; }
+  .ai-prompt-panel{
+    background:var(--panel-2); border:1px solid var(--line-strong); border-radius:var(--radius-s);
+    padding:14px; margin-bottom:14px;
+  }
+  .design-canvas-wrap{ display:flex; justify-content:center; margin-bottom:14px; }
+  .design-canvas{
+    position:relative; width:280px; height:280px;
+    background:var(--panel-3); border:2px solid var(--flame); border-radius:4px;
+    overflow:hidden; touch-action:none;
+  }
+  .dlayer{
+    position:absolute; box-sizing:border-box; cursor:move; user-select:none; -webkit-user-select:none;
+    border:1px dashed transparent; display:flex; align-items:center; justify-content:center; overflow:hidden;
+  }
+  .dlayer.selected{ border-color:var(--flame-2); }
+  .dlayer.text-layer{
+    font-family:var(--display); color:#fff; text-align:center; line-height:1.05;
+    outline:none; padding:2px; white-space:pre-wrap; word-break:break-word;
+  }
+  .dlayer.image-layer img, .dlayer.ai-layer canvas{ width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
+  .dlayer .handle{
+    position:absolute; width:16px; height:16px; background:var(--flame-2); border:2px solid var(--ink);
+    border-radius:50%; display:none; z-index:5;
+  }
+  .dlayer.selected .handle{ display:block; }
+  .handle.nw{ top:-8px; left:-8px; cursor:nwse-resize; }
+  .handle.ne{ top:-8px; right:-8px; cursor:nesw-resize; }
+  .handle.sw{ bottom:-8px; left:-8px; cursor:nesw-resize; }
+  .handle.se{ bottom:-8px; right:-8px; cursor:nwse-resize; }
+  .dlayer .del-btn{
+    position:absolute; top:-30px; right:-8px; width:24px; height:24px; border-radius:50%;
+    background:var(--err); color:#fff; display:none; align-items:center; justify-content:center;
+    font-size:12px; cursor:pointer; border:none; z-index:5; padding:0;
+  }
+  .dlayer.selected .del-btn{ display:flex; }
+  .layer-controls{ background:var(--panel-2); border:1px solid var(--line); border-radius:var(--radius-s); padding:14px; }
+  .layer-controls__row{ display:flex; gap:16px; flex-wrap:wrap; margin-bottom:12px; }
 
   .tabs{
     display:flex; gap:4px; background:var(--panel-2); border:1px solid var(--line);
@@ -707,12 +773,25 @@
       <div class="studio__preview">
         <div class="preview-price">Verre à bougie · <strong id="priceTag">34,00&nbsp;€</strong></div>
 
+        <div class="preview-tabs" role="tablist">
+          <button type="button" class="preview-tab active" id="previewTab3d" role="tab" aria-selected="true">Aperçu 3D</button>
+          <button type="button" class="preview-tab" id="previewTabReal" role="tab" aria-selected="false">Aperçu réaliste</button>
+        </div>
+
         <div class="stage3d" id="stage3d" role="img" aria-label="Aperçu 3D de votre verre à bougie — glissez pour le faire tourner">
           <div class="stage-controls">
             <button type="button" id="zoomIn" aria-label="Zoomer">+</button>
             <button type="button" id="zoomOut" aria-label="Dézoomer">−</button>
             <button type="button" id="resetView" aria-label="Réinitialiser la vue">⟳</button>
           </div>
+        </div>
+
+        <div class="stage-real" id="stageReal" hidden>
+          <div class="stage-real__pending" id="stageRealPending">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16l4.5-6 3.5 4.5 2.5-3L20 16"/><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+            <p><strong>Aperçu réaliste — bientôt disponible</strong><br>Cette vue affichera votre bougie composée sur une vraie photo, une fois celle-ci fournie à l'atelier.</p>
+          </div>
+          <canvas id="stageRealCanvas" hidden></canvas>
         </div>
 
         <p class="preview-caption" id="stageHint">Glissez le verre, ou utilisez les flèches ← → une fois la zone sélectionnée.</p>
@@ -728,78 +807,52 @@
 
         <div class="field">
           <div class="field__label" style="margin-bottom:8px;">Zone de gravure — 60 × 60 mm</div>
-          <p class="field__hint" style="margin-top:0; margin-bottom:16px;">Texte centré en partie haute, logo centré en partie basse — visibles en pointillés sur le verre.</p>
-          <label class="field__label" for="engraveInput">
-            Votre message gravé
-            <span class="field__count"><span id="charCount">0</span>/24</span>
-          </label>
-          <input class="text-input" id="engraveInput" type="text" maxlength="24" placeholder="Ex. Maison Léa &amp; Nino">
-          <p class="field__hint">Une ligne, gravée sur le verre — réglez sa police, sa taille et son style ci-dessous.</p>
+          <p class="field__hint" style="margin-top:0; margin-bottom:16px;">Ajoutez du texte, une photo ou un motif généré par IA, puis déplacez-les et redimensionnez-les directement dans la zone.</p>
 
-          <div class="text-controls">
-            <div class="mini-field">
-              <div class="mini-label">Police</div>
-              <div class="font-select" id="fontSelectWrap">
-                <button type="button" class="font-select__btn" id="fontBtn" aria-haspopup="listbox" aria-expanded="false">
-                  <span class="font-select__current" id="fontCurrent">Cormorant</span>
-                  <span class="font-select__chevron">▾</span>
-                </button>
-                <div class="font-menu" id="fontMenu" role="listbox" hidden></div>
-              </div>
-            </div>
-
-            <div class="mini-field">
-              <div class="mini-label">Taille <span id="sizeValue">52 px</span></div>
-              <input type="range" id="sizeRange" min="28" max="72" step="2" value="52" aria-label="Taille du texte gravé">
-            </div>
-
-            <div class="mini-field">
-              <div class="mini-label">Style</div>
-              <div class="style-toggles">
-                <button type="button" class="style-toggle active" id="toggleItalic" aria-pressed="true" aria-label="Italique"><span style="font-style:italic;">I</span></button>
-                <button type="button" class="style-toggle" id="toggleBold" aria-pressed="false" aria-label="Gras"><span style="font-weight:700;">B</span></button>
-                <button type="button" class="style-toggle" id="toggleCaps" aria-pressed="false" aria-label="Majuscules"><span style="font-size:11px; letter-spacing:0.5px;">AA</span></button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="field">
-          <div class="field__label">Votre motif — zone dessin</div>
-
-          <div class="tabs" role="tablist">
-            <button type="button" class="tab active" id="tabAi" data-panel="ai" role="tab" aria-selected="true">Générer avec l'IA</button>
-            <button type="button" class="tab" id="tabFile" data-panel="file" role="tab" aria-selected="false">Importer un fichier</button>
+          <div class="editor-toolbar">
+            <button type="button" class="btn btn--ghost btn--sm" id="addTextLayerBtn">+ Texte</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="addPhotoLayerBtn">+ Photo</button>
+            <button type="button" class="btn btn--ghost btn--sm" id="addAiLayerBtn">+ Motif IA</button>
+            <input type="file" id="layerFileInput" accept="image/jpeg,image/png,image/webp" style="display:none;">
           </div>
 
-          <div class="tab-panel" data-panel="ai">
+          <div class="ai-prompt-panel" id="aiPromptPanel" hidden>
             <textarea class="ai-prompt" id="aiPrompt" maxlength="200" rows="2" placeholder="Décrivez le motif à graver — ex. « un brin de lavande, dessiné au trait fin »"></textarea>
             <div class="ai-row">
-              <button type="button" class="btn btn--ghost" id="aiGenerateBtn">Générer le motif</button>
+              <button type="button" class="btn btn--flame" style="padding:10px 18px; font-size:13px;" id="aiGenerateBtn">Générer</button>
+              <button type="button" class="btn btn--ghost" style="padding:10px 18px; font-size:13px;" id="aiPromptCancel">Annuler</button>
               <span class="ai-status"><span class="spinner" id="aiSpinner"></span><span id="aiStatusText"></span></span>
             </div>
-            <p class="field__hint">Aperçu généré en mode démonstration à partir de votre texte. Pour un rendu réellement fidèle à votre description, ce bouton doit être relié à un service de génération d'image côté serveur — voir la note à la fin de mon message.</p>
           </div>
 
-          <div class="tab-panel" data-panel="file" hidden>
-            <label class="dropzone" id="dropzone" for="fileInput">
-              <span class="dropzone__icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M12 4l-4 4M12 4l4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
-              </span>
-              <span class="dropzone__text">
-                <strong>Importez une photo ou un PDF</strong>
-                <span>JPG, PNG, WEBP ou PDF · 10 Mo max · les photos sont converties en dessin fidèle</span>
-              </span>
-              <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,application/pdf">
-            </label>
+          <div class="design-canvas-wrap">
+            <div class="design-canvas" id="designCanvas" aria-label="Zone de personnalisation — glissez pour déplacer, tirez les coins pour redimensionner"></div>
           </div>
+          <p class="ai-status" id="photoStatus" style="justify-content:center;"><span class="spinner" id="photoSpinner"></span><span id="photoStatusText"></span></p>
 
-          <div class="file-chip" id="fileChip">
-            <span class="file-chip__name" id="fileName"></span>
-            <button type="button" id="fileRemove" aria-label="Retirer le motif">✕</button>
+          <div class="layer-controls" id="layerControls" hidden>
+            <div class="layer-controls__row" id="textLayerControls" hidden>
+              <div class="mini-field">
+                <div class="mini-label">Police</div>
+                <div class="font-select" id="fontSelectWrap">
+                  <button type="button" class="font-select__btn" id="fontBtn" aria-haspopup="listbox" aria-expanded="false">
+                    <span class="font-select__current" id="fontCurrent">Cormorant</span>
+                    <span class="font-select__chevron">▾</span>
+                  </button>
+                  <div class="font-menu" id="fontMenu" role="listbox" hidden></div>
+                </div>
+              </div>
+              <div class="mini-field">
+                <div class="mini-label">Style</div>
+                <div class="style-toggles">
+                  <button type="button" class="style-toggle" id="toggleItalic" aria-pressed="false" aria-label="Italique"><span style="font-style:italic;">I</span></button>
+                  <button type="button" class="style-toggle" id="toggleBold" aria-pressed="false" aria-label="Gras"><span style="font-weight:700;">B</span></button>
+                  <button type="button" class="style-toggle" id="toggleCaps" aria-pressed="false" aria-label="Majuscules"><span style="font-size:11px; letter-spacing:0.5px;">AA</span></button>
+                </div>
+              </div>
+            </div>
+            <button type="button" class="btn btn--ghost" id="deleteLayerBtn" style="padding:9px 16px; font-size:12.5px;">Supprimer cet élément</button>
           </div>
-          <div class="ai-status" id="photoStatus" style="margin-top:10px;"><span class="spinner" id="photoSpinner"></span><span id="photoStatusText"></span></div>
-          <p class="field__hint" style="margin-top:12px;">Zone de gravure : 60 × 60 mm — texte centré en haut, logo centré en bas, occupant toute la largeur disponible.</p>
         </div>
 
         <div class="cta-row">
@@ -1056,12 +1109,8 @@
     return FONTS[0];
   }
 
-  var state = {
-    color: COLORS[0], text:'', motifType:'none', aiSeed:0,
-    fontId:'cormorant', fontSize:52, italic:true, bold:false, caps:false
-  };
+  var state = { color: COLORS[0] };
   var cart = [];
-  var motifImgEl = null;
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   var swatchesEl  = document.getElementById('swatches');
@@ -1098,6 +1147,9 @@
     });
     swatchName.innerHTML = c.name + ' <span>· verre teinté à la main</span>';
     updateGlassColor();
+    // designCanvasEl est déclaré plus loin dans le script ; ce garde évite une
+    // erreur lors du tout premier appel (sélection de la teinte par défaut).
+    if(typeof designCanvasEl !== 'undefined' && designCanvasEl){ designCanvasEl.style.background = c.fill; }
   }
   selectColor(COLORS[0]);
 
@@ -1229,7 +1281,7 @@
 
   /* ===================== Engraving canvas (feeds the 3D texture) ===================== */
   var engraveCanvas = document.createElement('canvas');
-  engraveCanvas.width = 512; engraveCanvas.height = 640;
+  engraveCanvas.width = 512; engraveCanvas.height = 1024; // dimensions en puissance de deux (compatibilité WebGL maximale)
   var engraveTexture = null; // created once THREE is ready
 
   // Zone de gravure réelle : 60 x 60 mm, texte en haut, logo en bas.
@@ -1258,7 +1310,6 @@
   var ENGRAVE_ZONE_MM = 60;
   var ZONE_W_PX = ENGRAVE_ZONE_MM * PX_PER_MM_X;
   var ZONE_H_PX = ENGRAVE_ZONE_MM * PX_PER_MM_Y;
-  var ZONE_HALF_H_PX = ZONE_H_PX / 2;
 
   function drawImageCover(ctx, img, x, y, w, h){
     var ir = img.width / img.height, tr = w / h, sx, sy, sw, sh;
@@ -1305,81 +1356,140 @@
     ctx.beginPath(); ctx.ellipse(cx, cy, rx*0.14, ry*0.14, 0, 0, Math.PI*2); ctx.stroke();
   }
 
+  /* ===================== Export du fichier de gravure (xTool Studio) =====================
+     Génère un SVG dimensionné en millimètres réels (60 x 60 mm), contenant
+     une image bitmap haute résolution du design — c'est le format le plus
+     fiable pour ce cas d'usage : xTool Creative Space traite de toute façon
+     les photos/motifs comme des bitmaps pour la gravure (seul le texte
+     vectoriel permettrait la découpe, dont on n'a pas besoin ici), et le
+     SVG porte les dimensions réelles sans ambiguïté d'échelle.
+     Convention : marques en noir, fond en blanc (lecture sans ambiguïté par
+     le logiciel, quel que soit son traitement de la transparence).
+  ============================================================================ */
+  function rasterizeAlphaToBlackOnWhite(canvas){
+    var ctx = canvas.getContext('2d');
+    var data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    var px = data.data;
+    for(var i=0; i<px.length; i+=4){
+      var a = px[i+3] / 255;
+      var v = Math.round(255 * (1 - a)); // trait (alpha fort) -> noir ; transparent -> blanc
+      px[i] = v; px[i+1] = v; px[i+2] = v; px[i+3] = 255;
+    }
+    ctx.putImageData(data, 0, 0);
+    return canvas;
+  }
+
+  function generateEngravingSVG(){
+    var MM = 60;
+    var DPI = 300;
+    var sizePx = Math.round(MM / 25.4 * DPI); // ≈709px, résolution confortable pour la gravure
+
+    var canvas = document.createElement('canvas');
+    canvas.width = sizePx; canvas.height = sizePx;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, sizePx, sizePx);
+
+    layers.forEach(function(layer){
+      var lx = layer.x*sizePx, ly = layer.y*sizePx, lw = layer.w*sizePx, lh = layer.h*sizePx;
+
+      if(layer.type === 'text' && layer.text){
+        ctx.save();
+        var famObj = getFont(layer.fontId);
+        var weight = layer.bold ? '700' : '500';
+        var styleStr = layer.italic ? 'italic ' : '';
+        var fontSizePx = lh * 0.68;
+        ctx.font = styleStr + weight + ' ' + fontSizePx + 'px ' + famObj.family + ', Georgia, serif';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        var displayText = layer.caps ? layer.text.toUpperCase() : layer.text;
+        var metrics = ctx.measureText(displayText);
+        var scaleX = metrics.width > lw ? lw / metrics.width : 1;
+        ctx.translate(lx + lw/2, ly + lh/2);
+        ctx.scale(scaleX, 1);
+        ctx.fillText(displayText, 0, 0);
+        ctx.restore();
+      } else if(layer.type === 'image' && layer.imgEl){
+        var tmp = document.createElement('canvas');
+        tmp.width = Math.max(1, Math.round(lw)); tmp.height = Math.max(1, Math.round(lh));
+        drawImageCover(tmp.getContext('2d'), layer.imgEl, 0, 0, tmp.width, tmp.height);
+        rasterizeAlphaToBlackOnWhite(tmp);
+        ctx.drawImage(tmp, lx, ly, lw, lh);
+      } else if(layer.type === 'ai'){
+        var tmp2 = document.createElement('canvas');
+        tmp2.width = Math.max(1, Math.round(lw)); tmp2.height = Math.max(1, Math.round(lh));
+        drawGeneratedMotif(tmp2.getContext('2d'), tmp2.width/2, tmp2.height/2, tmp2.width/2, tmp2.height/2, layer.aiSeed);
+        rasterizeAlphaToBlackOnWhite(tmp2);
+        ctx.drawImage(tmp2, lx, ly, lw, lh);
+      }
+    });
+
+    var pngDataUrl = canvas.toDataURL('image/png');
+    return '<svg xmlns="http://www.w3.org/2000/svg" width="'+MM+'mm" height="'+MM+'mm" viewBox="0 0 '+MM+' '+MM+'">' +
+      '<image x="0" y="0" width="'+MM+'" height="'+MM+'" preserveAspectRatio="none" href="'+pngDataUrl+'"/>' +
+      '</svg>';
+  }
+
   function updateEngravingTexture(){
     var ctx = engraveCanvas.getContext('2d');
     var W = engraveCanvas.width, H = engraveCanvas.height;
     ctx.clearRect(0,0,W,H);
 
     var zoneCx = W/2, zoneCy = H/2;
-    var zoneLeft = zoneCx - ZONE_W_PX/2, zoneRight = zoneCx + ZONE_W_PX/2;
-    var zoneTop = zoneCy - ZONE_HALF_H_PX, zoneMid = zoneCy, zoneBottom = zoneCy + ZONE_HALF_H_PX;
-    var textCy = (zoneTop + zoneMid) / 2;
-    var logoCy = (zoneMid + zoneBottom) / 2;
+    var zoneLeft = zoneCx - ZONE_W_PX/2, zoneTop = zoneCy - ZONE_H_PX/2;
 
-    if(state.text){
-      ctx.save();
-      var famObj = getFont(state.fontId);
-      var weight = state.bold ? '700' : '500';
-      var styleStr = state.italic ? 'italic ' : '';
-      ctx.font = styleStr + weight + ' ' + state.fontSize + 'px ' + famObj.family + ', Georgia, serif';
-      ctx.fillStyle = 'rgba(255,255,255,0.92)';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.45)';
-      ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
-      var displayText = state.caps ? state.text.toUpperCase() : state.text;
-      var maxW = ZONE_W_PX * 0.94;
-      var metrics = ctx.measureText(displayText);
-      var scale = metrics.width > maxW ? maxW / metrics.width : 1;
-      ctx.translate(zoneCx, textCy);
-      ctx.scale(scale, scale);
-      ctx.fillText(displayText, 0, 0);
-      ctx.restore();
-    }
+    layers.forEach(function(layer){
+      var lx = zoneLeft + layer.x*ZONE_W_PX;
+      var ly = zoneTop + layer.y*ZONE_H_PX;
+      var lw = layer.w*ZONE_W_PX, lh = layer.h*ZONE_H_PX;
 
-    // Zone logo (moitié basse) : occupe tout le rectangle disponible
-    // (60 x 30 mm), plus de forme ronde imposée.
-    var logoX = zoneLeft, logoY = zoneMid, logoW = ZONE_W_PX, logoH = ZONE_HALF_H_PX;
-    var logoCxRect = logoX + logoW/2;
+      if(layer.type === 'text' && layer.text){
+        ctx.save();
+        var famObj = getFont(layer.fontId);
+        var weight = layer.bold ? '700' : '500';
+        var styleStr = layer.italic ? 'italic ' : '';
+        var fontSizePx = lh * 0.68;
+        ctx.font = styleStr + weight + ' ' + fontSizePx + 'px ' + famObj.family + ', Georgia, serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'rgba(0,0,0,0.45)';
+        ctx.shadowBlur = 6; ctx.shadowOffsetY = 2;
+        var displayText = layer.caps ? layer.text.toUpperCase() : layer.text;
+        var metrics = ctx.measureText(displayText);
+        var scaleX = metrics.width > lw ? lw / metrics.width : 1;
+        ctx.translate(lx + lw/2, ly + lh/2);
+        ctx.scale(scaleX, 1);
+        ctx.fillText(displayText, 0, 0);
+        ctx.restore();
+      } else if(layer.type === 'image' && layer.imgEl){
+        ctx.save();
+        ctx.beginPath(); ctx.rect(lx, ly, lw, lh); ctx.clip();
+        drawImageCover(ctx, layer.imgEl, lx, ly, lw, lh);
+        ctx.restore();
+      } else if(layer.type === 'ai'){
+        ctx.save();
+        ctx.beginPath(); ctx.rect(lx, ly, lw, lh); ctx.clip();
+        drawGeneratedMotif(ctx, lx + lw/2, ly + lh/2, lw/2, lh/2, layer.aiSeed);
+        ctx.restore();
+      }
+    });
 
-    if(state.motifType === 'image' && motifImgEl){
+    if(layers.length === 0){
       ctx.save();
-      ctx.beginPath(); ctx.rect(logoX, logoY, logoW, logoH); ctx.clip();
-      drawImageCover(ctx, motifImgEl, logoX, logoY, logoW, logoH);
-      ctx.restore();
-    } else if(state.motifType === 'pdf'){
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.setLineDash([4,5]); ctx.lineWidth = 2;
-      ctx.strokeRect(logoX, logoY, logoW, logoH);
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';
-      ctx.font = "600 " + Math.max(13, Math.min(logoW,logoH)*0.28) + "px 'IBM Plex Mono', monospace";
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('PDF', logoCxRect, logoCy);
-      ctx.restore();
-    } else if(state.motifType === 'ai'){
-      ctx.save();
-      ctx.beginPath(); ctx.rect(logoX, logoY, logoW, logoH); ctx.clip();
-      drawGeneratedMotif(ctx, logoCxRect, logoCy, logoW/2, logoH/2, state.aiSeed);
-      ctx.restore();
-    } else {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.setLineDash([3,4]); ctx.lineWidth = 1.5;
-      ctx.strokeRect(logoX, logoY, logoW, logoH);
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.setLineDash([4,5]); ctx.lineWidth = 1.5;
+      ctx.strokeRect(zoneLeft, zoneTop, ZONE_W_PX, ZONE_H_PX);
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = "500 13px 'IBM Plex Mono', monospace";
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText('MOTIF', logoCxRect, logoCy);
+      ctx.fillText('AJOUTEZ UN ÉLÉMENT', zoneCx, zoneCy);
       ctx.restore();
     }
 
-    // Repère de la zone de gravure totale (60 x 60 mm) + séparation texte / logo.
+    // Repère de la zone de gravure (60 x 60 mm), toujours visible.
     ctx.save();
     ctx.strokeStyle = '#FF3B30'; ctx.setLineDash([]); ctx.lineWidth = 3;
     ctx.strokeRect(zoneLeft, zoneTop, ZONE_W_PX, ZONE_H_PX);
-    ctx.beginPath();
-    ctx.setLineDash([6,5]); ctx.lineWidth = 2;
-    ctx.moveTo(zoneLeft, zoneMid); ctx.lineTo(zoneRight, zoneMid);
-    ctx.stroke();
     ctx.restore();
 
     if(engraveTexture){ engraveTexture.needsUpdate = true; }
@@ -1388,20 +1498,212 @@
 
   document.fonts && document.fonts.ready && document.fonts.ready.then(function(){ updateEngravingTexture(); });
 
-  /* ===================== Text field ===================== */
-  var engraveInput = document.getElementById('engraveInput');
-  var charCount = document.getElementById('charCount');
-  engraveInput.addEventListener('input', function(){
-    state.text = engraveInput.value;
-    charCount.textContent = state.text.length;
+  /* ===================== Éditeur de personnalisation (calques libres) ===================== */
+  var layers = [];
+  var selectedLayerId = null;
+  var nextLayerId = 1;
+  var designCanvasEl = document.getElementById('designCanvas');
+  designCanvasEl.style.background = state.color.fill;
+  var layerControlsEl = document.getElementById('layerControls');
+  var textLayerControlsEl = document.getElementById('textLayerControls');
+
+  function getLayer(id){
+    for(var i=0; i<layers.length; i++){ if(layers[i].id === id) return layers[i]; }
+    return null;
+  }
+  function createLayer(type, extra){
+    var layer = Object.assign({ id:'layer'+(nextLayerId++), type:type, x:0.2, y:0.35, w:0.6, h:0.3 }, extra || {});
+    layers.push(layer);
+    return layer;
+  }
+  function deleteLayer(id){
+    layers = layers.filter(function(l){ return l.id !== id; });
+    if(selectedLayerId === id) selectedLayerId = null;
+    renderLayers();
+    updateLayerControlsPanel();
     updateEngravingTexture();
+  }
+  function selectLayer(id){
+    selectedLayerId = id;
+    renderLayers();
+    updateLayerControlsPanel();
+  }
+  function updateLayerControlsPanel(){
+    var layer = selectedLayerId ? getLayer(selectedLayerId) : null;
+    if(!layer){ layerControlsEl.hidden = true; return; }
+    layerControlsEl.hidden = false;
+    textLayerControlsEl.hidden = (layer.type !== 'text');
+    if(layer.type === 'text'){
+      var f = getFont(layer.fontId);
+      fontCurrent.textContent = f.label;
+      fontCurrent.style.fontFamily = f.family;
+      Array.prototype.forEach.call(fontMenu.querySelectorAll('.font-option'), function(el){
+        el.classList.toggle('active', el.dataset.id === layer.fontId);
+      });
+      var ti = document.getElementById('toggleItalic'), tb = document.getElementById('toggleBold'), tc = document.getElementById('toggleCaps');
+      ti.classList.toggle('active', !!layer.italic); ti.setAttribute('aria-pressed', !!layer.italic);
+      tb.classList.toggle('active', !!layer.bold); tb.setAttribute('aria-pressed', !!layer.bold);
+      tc.classList.toggle('active', !!layer.caps); tc.setAttribute('aria-pressed', !!layer.caps);
+    }
+  }
+
+  function updateLayerPosition(layer){
+    var el = designCanvasEl.querySelector('[data-id="'+layer.id+'"]');
+    if(!el) return;
+    el.style.left = (layer.x*100)+'%';
+    el.style.top = (layer.y*100)+'%';
+    el.style.width = (layer.w*100)+'%';
+    el.style.height = (layer.h*100)+'%';
+    if(layer.type === 'text'){ el.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px'; }
+  }
+
+  function renderLayers(){
+    designCanvasEl.innerHTML = '';
+    layers.forEach(function(layer){
+      var el = document.createElement('div');
+      el.className = 'dlayer ' + layer.type + '-layer' + (layer.id === selectedLayerId ? ' selected' : '');
+      el.dataset.id = layer.id;
+      el.style.left = (layer.x*100)+'%'; el.style.top = (layer.y*100)+'%';
+      el.style.width = (layer.w*100)+'%'; el.style.height = (layer.h*100)+'%';
+
+      if(layer.type === 'text'){
+        el.contentEditable = 'true';
+        el.spellcheck = false;
+        el.textContent = layer.text || '';
+        var fam = getFont(layer.fontId || 'cormorant');
+        el.style.fontFamily = fam.family;
+        el.style.fontWeight = layer.bold ? '700' : '500';
+        el.style.fontStyle = layer.italic ? 'italic' : 'normal';
+        el.style.textTransform = layer.caps ? 'uppercase' : 'none';
+        el.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
+        el.addEventListener('input', function(){ layer.text = el.textContent; scheduleEngraveUpdate(); });
+        el.addEventListener('pointerdown', function(e){ e.stopPropagation(); if(layer.id !== selectedLayerId) selectLayer(layer.id); });
+      } else if(layer.type === 'image' && layer.previewSrc){
+        var img = document.createElement('img');
+        img.src = layer.previewSrc;
+        img.draggable = false;
+        el.appendChild(img);
+      } else if(layer.type === 'ai'){
+        var canvas = document.createElement('canvas');
+        canvas.width = 200; canvas.height = 200;
+        drawGeneratedMotif(canvas.getContext('2d'), 100, 100, 92, 92, layer.aiSeed);
+        el.appendChild(canvas);
+      }
+
+      ['nw','ne','sw','se'].forEach(function(pos){
+        var h = document.createElement('div');
+        h.className = 'handle ' + pos;
+        h.addEventListener('pointerdown', function(e){ e.stopPropagation(); e.preventDefault(); startResize(e, layer, pos); });
+        el.appendChild(h);
+      });
+
+      var del = document.createElement('button');
+      del.type = 'button'; del.className = 'del-btn'; del.setAttribute('aria-label', 'Supprimer');
+      del.textContent = '✕';
+      del.addEventListener('pointerdown', function(e){ e.stopPropagation(); });
+      del.addEventListener('click', function(e){ e.stopPropagation(); deleteLayer(layer.id); });
+      el.appendChild(del);
+
+      el.addEventListener('pointerdown', function(e){
+        if(e.target.classList.contains('handle') || e.target.classList.contains('del-btn')) return;
+        if(layer.id !== selectedLayerId) selectLayer(layer.id);
+        startDrag(e, layer);
+      });
+
+      designCanvasEl.appendChild(el);
+    });
+  }
+
+  designCanvasEl.addEventListener('pointerdown', function(e){
+    if(e.target === designCanvasEl){ selectedLayerId = null; renderLayers(); updateLayerControlsPanel(); }
   });
 
-  /* ---------- font, size & style controls ---------- */
-  function ensureFontLoaded(f){
+  var dragState = null;
+  function startDrag(e, layer){
+    var rect = designCanvasEl.getBoundingClientRect();
+    dragState = { layer:layer, startX:e.clientX, startY:e.clientY, origX:layer.x, origY:layer.y, cw:rect.width, ch:rect.height };
+    document.addEventListener('pointermove', onDrag);
+    document.addEventListener('pointerup', onDragEnd);
+  }
+  function onDrag(e){
+    if(!dragState) return;
+    var dx = (e.clientX - dragState.startX) / dragState.cw;
+    var dy = (e.clientY - dragState.startY) / dragState.ch;
+    var l = dragState.layer;
+    l.x = clamp(dragState.origX + dx, 0, 1 - l.w);
+    l.y = clamp(dragState.origY + dy, 0, 1 - l.h);
+    updateLayerPosition(l);
+    scheduleEngraveUpdate();
+  }
+  function onDragEnd(){
+    dragState = null;
+    document.removeEventListener('pointermove', onDrag);
+    document.removeEventListener('pointerup', onDragEnd);
+    updateEngravingTexture();
+  }
+
+  var resizeState = null;
+  function startResize(e, layer, corner){
+    var rect = designCanvasEl.getBoundingClientRect();
+    resizeState = { layer:layer, corner:corner, startX:e.clientX, startY:e.clientY,
+      origX:layer.x, origY:layer.y, origW:layer.w, origH:layer.h, cw:rect.width, ch:rect.height };
+    document.addEventListener('pointermove', onResize);
+    document.addEventListener('pointerup', onResizeEnd);
+  }
+  function onResize(e){
+    if(!resizeState) return;
+    var dx = (e.clientX - resizeState.startX) / resizeState.cw;
+    var dy = (e.clientY - resizeState.startY) / resizeState.ch;
+    var l = resizeState.layer, c = resizeState.corner, minSize = 0.08;
+    if(c === 'se'){
+      l.w = clamp(resizeState.origW + dx, minSize, 1 - l.x);
+      l.h = clamp(resizeState.origH + dy, minSize, 1 - l.y);
+    } else if(c === 'sw'){
+      var nw = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
+      l.x = resizeState.origX + resizeState.origW - nw; l.w = nw;
+      l.h = clamp(resizeState.origH + dy, minSize, 1 - l.y);
+    } else if(c === 'ne'){
+      l.w = clamp(resizeState.origW + dx, minSize, 1 - l.x);
+      var nh = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
+      l.y = resizeState.origY + resizeState.origH - nh; l.h = nh;
+    } else if(c === 'nw'){
+      var nw2 = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
+      l.x = resizeState.origX + resizeState.origW - nw2; l.w = nw2;
+      var nh2 = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
+      l.y = resizeState.origY + resizeState.origH - nh2; l.h = nh2;
+    }
+    updateLayerPosition(l);
+    scheduleEngraveUpdate();
+  }
+  function onResizeEnd(){
+    resizeState = null;
+    document.removeEventListener('pointermove', onResize);
+    document.removeEventListener('pointerup', onResizeEnd);
+    updateEngravingTexture();
+  }
+
+  var engraveUpdateTimer = null;
+  function scheduleEngraveUpdate(){
+    clearTimeout(engraveUpdateTimer);
+    engraveUpdateTimer = setTimeout(updateEngravingTexture, 60);
+  }
+
+  document.getElementById('deleteLayerBtn').addEventListener('click', function(){
+    if(selectedLayerId) deleteLayer(selectedLayerId);
+  });
+
+  document.getElementById('addTextLayerBtn').addEventListener('click', function(){
+    var layer = createLayer('text', { text:'Votre texte', fontId:'cormorant', italic:true, bold:false, caps:false, x:0.12, y:0.4, w:0.76, h:0.2 });
+    selectLayer(layer.id);
+    updateEngravingTexture();
+    showToast('Élément texte ajouté — déplacez-le et redimensionnez-le à votre goût.');
+  });
+
+  /* ---------- Police / style, appliqués au calque texte sélectionné ---------- */
+  function ensureFontLoaded(f, layer){
     if(document.fonts && document.fonts.load){
-      var weight = state.bold ? '700' : '500';
-      var styleStr = state.italic ? 'italic ' : '';
+      var weight = layer.bold ? '700' : '500';
+      var styleStr = layer.italic ? 'italic ' : '';
       document.fonts.load(styleStr + weight + ' 32px ' + f.family)
         .then(function(){ updateEngravingTexture(); })
         .catch(function(){});
@@ -1416,26 +1718,24 @@
   FONTS.forEach(function(f){
     var opt = document.createElement('button');
     opt.type = 'button';
-    opt.className = 'font-option' + (f.id === state.fontId ? ' active' : '');
+    opt.className = 'font-option';
     opt.setAttribute('role', 'option');
     opt.style.fontFamily = f.family;
     opt.dataset.id = f.id;
     opt.textContent = f.label;
-    opt.addEventListener('click', function(){ selectFont(f.id); closeFontMenu(); fontBtn.focus(); });
+    opt.addEventListener('click', function(){
+      var layer = getLayer(selectedLayerId);
+      if(!layer || layer.type !== 'text') return;
+      layer.fontId = f.id;
+      updateLayerControlsPanel();
+      ensureFontLoaded(f, layer);
+      renderLayers();
+      updateEngravingTexture();
+      closeFontMenu();
+      fontBtn.focus();
+    });
     fontMenu.appendChild(opt);
   });
-
-  function selectFont(id){
-    state.fontId = id;
-    var f = getFont(id);
-    fontCurrent.textContent = f.label;
-    fontCurrent.style.fontFamily = f.family;
-    Array.prototype.forEach.call(fontMenu.querySelectorAll('.font-option'), function(el){
-      el.classList.toggle('active', el.dataset.id === id);
-    });
-    ensureFontLoaded(f);
-    updateEngravingTexture();
-  }
 
   function openFontMenu(){
     fontMenu.removeAttribute('hidden');
@@ -1467,21 +1767,16 @@
     else if(e.key === 'Tab'){ closeFontMenu(); }
   });
 
-  var sizeRange = document.getElementById('sizeRange');
-  var sizeValue = document.getElementById('sizeValue');
-  sizeRange.addEventListener('input', function(){
-    state.fontSize = Number(sizeRange.value);
-    sizeValue.textContent = state.fontSize + ' px';
-    updateEngravingTexture();
-  });
-
   function bindStyleToggle(btnId, key){
     var btn = document.getElementById(btnId);
     btn.addEventListener('click', function(){
-      state[key] = !state[key];
-      btn.classList.toggle('active', state[key]);
-      btn.setAttribute('aria-pressed', state[key]);
-      if(key === 'italic' || key === 'bold'){ ensureFontLoaded(getFont(state.fontId)); }
+      var layer = getLayer(selectedLayerId);
+      if(!layer || layer.type !== 'text') return;
+      layer[key] = !layer[key];
+      btn.classList.toggle('active', layer[key]);
+      btn.setAttribute('aria-pressed', layer[key]);
+      if(key === 'italic' || key === 'bold'){ ensureFontLoaded(getFont(layer.fontId), layer); }
+      renderLayers();
       updateEngravingTexture();
     });
   }
@@ -1489,75 +1784,42 @@
   bindStyleToggle('toggleBold', 'bold');
   bindStyleToggle('toggleCaps', 'caps');
 
-  /* ===================== Tabs: AI vs file ===================== */
-  var tabAi = document.getElementById('tabAi');
-  var tabFile = document.getElementById('tabFile');
-  var panelAi = document.querySelector('.tab-panel[data-panel="ai"]');
-  var panelFile = document.querySelector('.tab-panel[data-panel="file"]');
-  function setTab(which){
-    var aiActive = which === 'ai';
-    tabAi.classList.toggle('active', aiActive);
-    tabFile.classList.toggle('active', !aiActive);
-    tabAi.setAttribute('aria-selected', aiActive);
-    tabFile.setAttribute('aria-selected', !aiActive);
-    panelAi.hidden = !aiActive;
-    panelFile.hidden = aiActive;
-  }
-  tabAi.addEventListener('click', function(){ setTab('ai'); });
-  tabFile.addEventListener('click', function(){ setTab('file'); });
+  /* ---------- + Photo ---------- */
+  var layerFileInput = document.getElementById('layerFileInput');
+  var MAX_SIZE = 10 * 1024 * 1024;
+  var ACCEPTED = ['image/jpeg','image/png','image/webp'];
 
-  /* ===================== AI motif generator (client-side demo) ===================== */
-  var aiGenerateBtn = document.getElementById('aiGenerateBtn');
-  var aiPrompt = document.getElementById('aiPrompt');
-  var aiSpinner = document.getElementById('aiSpinner');
-  var aiStatusText = document.getElementById('aiStatusText');
+  document.getElementById('addPhotoLayerBtn').addEventListener('click', function(){ layerFileInput.click(); });
+  layerFileInput.addEventListener('change', function(){
+    if(this.files && this.files[0]) handlePhotoFile(this.files[0]);
+    this.value = '';
+  });
 
-  aiGenerateBtn.addEventListener('click', function(){
-    var prompt = aiPrompt.value.trim();
-    if(!prompt){
-      showToast('Décrivez le motif souhaité avant de générer.');
-      aiPrompt.focus();
+  function handlePhotoFile(file){
+    if(ACCEPTED.indexOf(file.type) === -1){
+      showToast('Format non pris en charge — utilisez une image JPG, PNG ou WEBP.');
       return;
     }
-    aiGenerateBtn.disabled = true;
-    aiSpinner.classList.add('show');
-    aiStatusText.textContent = 'Génération en cours…';
-
-    // Emplacement d'intégration : remplacez ce délai simulé par un appel
-    // à votre service de génération d'image (voir note en fin de réponse).
-    setTimeout(function(){
-      state.motifType = 'ai';
-      state.aiSeed = hashString(prompt);
-      motifImgEl = null;
-      resetFileChip();
-      updateEngravingTexture();
-      aiGenerateBtn.disabled = false;
-      aiSpinner.classList.remove('show');
-      aiStatusText.textContent = 'Motif généré (démo)';
-      showToast('Motif généré à partir de votre description — mode démonstration.');
-    }, 900);
-  });
-
-  /* ===================== File upload / dropzone ===================== */
-  var dropzone = document.getElementById('dropzone');
-  var fileInput = document.getElementById('fileInput');
-  var fileChip = document.getElementById('fileChip');
-  var fileName = document.getElementById('fileName');
-  var fileRemove = document.getElementById('fileRemove');
-  var MAX_SIZE = 10 * 1024 * 1024;
-  var ACCEPTED = ['image/jpeg','image/png','image/webp','application/pdf'];
-
-  fileInput.addEventListener('change', function(){
-    if(fileInput.files && fileInput.files[0]) handleFile(fileInput.files[0]);
-  });
-  dropzone.addEventListener('dragover', function(e){ e.preventDefault(); dropzone.classList.add('dragover'); });
-  ['dragleave','drop'].forEach(function(evt){
-    dropzone.addEventListener(evt, function(){ dropzone.classList.remove('dragover'); });
-  });
-  dropzone.addEventListener('drop', function(e){
-    e.preventDefault();
-    if(e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
-  });
+    if(file.size > MAX_SIZE){
+      showToast('Fichier trop volumineux — 10 Mo maximum.');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var dataUrl = e.target.result;
+      var img = new Image();
+      img.onload = function(){
+        var lineArtCanvas = photoToLineArt(img);
+        var layer = createLayer('image', { imgEl:lineArtCanvas, previewSrc:lineArtCanvas.toDataURL(), x:0.15, y:0.15, w:0.7, h:0.7 });
+        selectLayer(layer.id);
+        updateEngravingTexture();
+        showToast('Photo convertie en dessin — déplacez-la et redimensionnez-la à votre goût.');
+        upgradePhotoViaAPI(dataUrl, layer.id);
+      };
+      img.src = dataUrl;
+    };
+    reader.readAsDataURL(file);
+  }
 
   /* ===================== Photo → dessin fidèle (pour la gravure) ===================== */
   // Convertit une photo importée en dessin (technique du "croquis crayon" :
@@ -1643,7 +1905,7 @@
   var photoSpinnerEl = document.getElementById('photoSpinner');
   var photoStatusTextEl = document.getElementById('photoStatusText');
 
-  function upgradePhotoViaAPI(dataUrl){
+  function upgradePhotoViaAPI(dataUrl, layerId){
     photoSpinnerEl.classList.add('show');
     photoStatusTextEl.textContent = 'Amélioration du dessin en cours…';
 
@@ -1666,10 +1928,11 @@
       var apiImg = new Image();
       apiImg.crossOrigin = 'anonymous'; // nécessaire pour pouvoir dessiner l'image sur le canevas
       apiImg.onload = function(){
-        // L'utilisateur a peut-être changé de motif entre-temps — on ne remplace
-        // que si une photo est toujours le motif actif.
-        if(state.motifType !== 'image') return;
-        motifImgEl = apiImg;
+        var layer = getLayer(layerId);
+        if(!layer || layer.type !== 'image') return; // le calque a peut-être été supprimé entre-temps
+        layer.imgEl = apiImg;
+        layer.previewSrc = data.imageUrl;
+        if(layer.id === selectedLayerId) renderLayers();
         updateEngravingTexture();
         photoSpinnerEl.classList.remove('show');
         photoStatusTextEl.textContent = '';
@@ -1687,57 +1950,67 @@
     });
   }
 
-  function handleFile(file){
-    if(ACCEPTED.indexOf(file.type) === -1){
-      showToast('Format non pris en charge — utilisez une image ou un PDF.');
-      return;
-    }
-    if(file.size > MAX_SIZE){
-      showToast('Fichier trop volumineux — 10 Mo maximum.');
-      return;
-    }
-    fileName.textContent = file.name;
-    fileChip.classList.add('show');
-    aiStatusText.textContent = '';
-    photoStatusTextEl.textContent = '';
+  /* ---------- + Motif IA ---------- */
+  var aiPromptPanel = document.getElementById('aiPromptPanel');
+  var aiPrompt = document.getElementById('aiPrompt');
+  var aiGenerateBtn = document.getElementById('aiGenerateBtn');
+  var aiSpinner = document.getElementById('aiSpinner');
+  var aiStatusText = document.getElementById('aiStatusText');
 
-    if(file.type === 'application/pdf'){
-      motifImgEl = null;
-      state.motifType = 'pdf';
-      updateEngravingTexture();
-      showToast('PDF ajouté à la gravure.');
-    } else {
-      var reader = new FileReader();
-      reader.onload = function(e){
-        var dataUrl = e.target.result;
-        var img = new Image();
-        img.onload = function(){
-          // Aperçu instantané (algorithme local), puis tentative d'amélioration via l'API.
-          motifImgEl = photoToLineArt(img);
-          state.motifType = 'image';
-          updateEngravingTexture();
-          showToast('Photo convertie en dessin pour la gravure.');
-          upgradePhotoViaAPI(dataUrl);
-        };
-        img.src = dataUrl;
-      };
-      reader.readAsDataURL(file);
-    }
-  }
-
-  function resetFileChip(){
-    fileInput.value = '';
-    fileChip.classList.remove('show');
-  }
-  fileRemove.addEventListener('click', function(){
-    resetFileChip();
-    motifImgEl = null;
-    state.motifType = 'none';
-    aiStatusText.textContent = '';
-    photoStatusTextEl.textContent = '';
-    photoSpinnerEl.classList.remove('show');
-    updateEngravingTexture();
+  document.getElementById('addAiLayerBtn').addEventListener('click', function(){
+    aiPromptPanel.hidden = false;
+    aiPrompt.focus();
   });
+  document.getElementById('aiPromptCancel').addEventListener('click', function(){
+    aiPromptPanel.hidden = true;
+    aiPrompt.value = '';
+  });
+
+  aiGenerateBtn.addEventListener('click', function(){
+    var prompt = aiPrompt.value.trim();
+    if(!prompt){
+      showToast('Décrivez le motif souhaité avant de générer.');
+      aiPrompt.focus();
+      return;
+    }
+    aiGenerateBtn.disabled = true;
+    aiSpinner.classList.add('show');
+    aiStatusText.textContent = 'Génération en cours…';
+
+    // Emplacement d'intégration : remplacez ce délai simulé par un appel
+    // à votre service de génération d'image (voir note fournie précédemment).
+    setTimeout(function(){
+      var layer = createLayer('ai', { aiSeed: hashString(prompt), x:0.15, y:0.15, w:0.7, h:0.7 });
+      selectLayer(layer.id);
+      updateEngravingTexture();
+      aiGenerateBtn.disabled = false;
+      aiSpinner.classList.remove('show');
+      aiStatusText.textContent = '';
+      aiPromptPanel.hidden = true;
+      aiPrompt.value = '';
+      showToast('Motif généré à partir de votre description — mode démonstration.');
+    }, 900);
+  });
+
+  /* ===================== Bascule Aperçu 3D / Aperçu réaliste ===================== */
+  var previewTab3d = document.getElementById('previewTab3d');
+  var previewTabReal = document.getElementById('previewTabReal');
+  var stageRealEl = document.getElementById('stageReal');
+  var stage3dHint = 'Glissez le verre, ou utilisez les flèches ← → une fois la zone sélectionnée.';
+  var stageRealHint = 'Rendu composé sur une photo réelle du verre, en attente côté atelier.';
+
+  function setPreviewMode(mode){
+    var is3d = mode === '3d';
+    previewTab3d.classList.toggle('active', is3d);
+    previewTabReal.classList.toggle('active', !is3d);
+    previewTab3d.setAttribute('aria-selected', is3d);
+    previewTabReal.setAttribute('aria-selected', !is3d);
+    stageEl.hidden = !is3d;
+    stageRealEl.hidden = is3d;
+    document.getElementById('stageHint').textContent = is3d ? stage3dHint : stageRealHint;
+  }
+  previewTab3d.addEventListener('click', function(){ setPreviewMode('3d'); });
+  previewTabReal.addEventListener('click', function(){ setPreviewMode('real'); });
 
   /* ===================== 3D scene ===================== */
   var stageEl = document.getElementById('stage3d');
@@ -1787,6 +2060,12 @@
       group = new THREE.Group();
       group.scale.set(GROUP_SCALE, GROUP_SCALE, GROUP_SCALE);
       group.position.y = GROUP_OFFSET_Y;
+      // Le contenu du canevas de gravure est dessiné centré (U≈0,5), ce qui
+      // correspond par défaut à l'arrière du verre — on tourne donc le
+      // groupe d'un demi-tour pour que ce soit bien la face avant qui soit
+      // visible en premier, sans avoir besoin d'un mode de répétition de
+      // texture (voir note plus bas sur engraveTexture).
+      group.rotation.y = Math.PI;
       scene.add(group);
 
       // Le vrai verre : modèle 3D fourni (verre_cm.glb), embarqué en base64.
@@ -1834,8 +2113,10 @@
       // le texte et le motif suivent donc la rondeur réelle du verre au lieu
       // de flotter devant.
       engraveTexture = new THREE.CanvasTexture(engraveCanvas);
-      engraveTexture.wrapS = THREE.RepeatWrapping;
-      engraveTexture.offset.x = 0.5; // centre le contenu du canevas sur la face avant
+      // Pas de mode de répétition ici : avec une texture 512x1024, on reste
+      // sur le mode par défaut (bords figés), compatible avec toutes les
+      // configurations WebGL, et le contenu est déjà orienté côté caméra
+      // grâce à la rotation du groupe ci-dessus.
       var engraveMat = new THREE.MeshBasicMaterial({ map: engraveTexture, transparent:true, depthWrite:false, depthTest:false, side: THREE.DoubleSide });
       var engraveGeo = new THREE.CylinderGeometry(GLASS_WAIST_R + 0.15, GLASS_BASE_R + 0.15, DECAL_HEIGHT_CM, 48, 1, true);
       engraveMesh = new THREE.Mesh(engraveGeo, engraveMat);
@@ -1912,7 +2193,7 @@
       camera.position.z = clamp(camera.position.z + 0.6, Z_MIN, Z_MAX); markInteraction();
     });
     document.getElementById('resetView').addEventListener('click', function(){
-      camera.position.set(0, 0.35, 6.2); group.rotation.y = 0; markInteraction();
+      camera.position.set(0, 0.35, 6.2); group.rotation.y = Math.PI; markInteraction();
     });
 
     stageEl.setAttribute('tabindex', '0');
@@ -2002,19 +2283,39 @@
       cart.push({
         id: Date.now() + Math.random(),
         color: newItem.color, text: newItem.text, motifDesc: newItem.motifDesc,
-        unitPrice: newItem.unitPrice, qty: Math.max(1, Math.min(20, newItem.qty))
+        unitPrice: newItem.unitPrice, qty: Math.max(1, Math.min(20, newItem.qty)),
+        engravingFile: newItem.engravingFile || null
       });
     }
     renderCart();
   }
 
+  function summarizeLayers(){
+    var textParts = layers.filter(function(l){ return l.type === 'text' && l.text; }).map(function(l){ return l.text; });
+    var hasImage = layers.some(function(l){ return l.type === 'image'; });
+    var hasAi = layers.some(function(l){ return l.type === 'ai'; });
+    var motifParts = [];
+    if(hasImage) motifParts.push('photo importée');
+    if(hasAi) motifParts.push('motif généré (IA · démo)');
+    return {
+      text: textParts.length ? textParts.join(' / ') : null,
+      motifDesc: motifParts.length ? motifParts.join(' + ') : null
+    };
+  }
+
   document.getElementById('configForm').addEventListener('submit', function(e){
     e.preventDefault();
-    var motifDesc = state.motifType === 'image' ? 'motif importé'
-      : state.motifType === 'pdf' ? 'PDF joint'
-      : state.motifType === 'ai' ? 'motif généré (IA · démo)'
-      : null;
-    addToCart({ color: state.color, text: state.text, motifDesc: motifDesc, unitPrice: PRICE, qty: 1 });
+    if(layers.length === 0){
+      showToast('Ajoutez au moins un élément (texte, photo ou motif) avant d\u2019ajouter au panier.');
+      return;
+    }
+    var summary = summarizeLayers();
+    // Le fichier de gravure (SVG 60x60mm, prêt pour xTool Studio) est généré
+    // maintenant, au moment de l'ajout au panier — il voyage avec la
+    // commande dès sa création, mais ne sera exploitable côté atelier
+    // qu'une fois la commande marquée payée (voir api/admin/customers.js).
+    var engravingFile = generateEngravingSVG();
+    addToCart({ color: state.color, text: summary.text, motifDesc: summary.motifDesc, unitPrice: PRICE, qty: 1, engravingFile: engravingFile });
     showToast('Ajouté au panier — Verre '+state.color.name+', '+formatPrice(PRICE)+'.');
     openCart();
   });
@@ -2105,7 +2406,8 @@
       items: cart.map(function(i){
         return {
           colorName: i.color.name, colorHex: i.color.hex, colorFill: i.color.fill, colorStroke: i.color.stroke,
-          text: i.text, motifDesc: i.motifDesc, unitPrice: i.unitPrice, qty: i.qty
+          text: i.text, motifDesc: i.motifDesc, unitPrice: i.unitPrice, qty: i.qty,
+          engravingFile: i.engravingFile || null
         };
       })
     };
@@ -2345,7 +2647,7 @@
         var order = orders.filter(function(o){ return String(o.id) === String(orderId); })[0];
         if(!order) return;
         var item = order.items[itemIdx];
-        addToCart({ color:item.color, text:item.text, motifDesc:item.motifDesc, unitPrice:item.unitPrice, qty:qty });
+        addToCart({ color:item.color, text:item.text, motifDesc:item.motifDesc, unitPrice:item.unitPrice, qty:qty, engravingFile:item.engravingFile });
         showToast('Ajouté au panier — '+qty+' × '+item.color.name+'.');
         closeAccount();
         openCart();
