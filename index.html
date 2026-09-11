@@ -442,9 +442,11 @@
     border:1px dashed transparent; display:flex; align-items:center; justify-content:center; overflow:hidden;
   }
   .dlayer.selected{ border-color:var(--flame-2); }
-  .dlayer.text-layer{
+  .dlayer-text-inner{
+    width:100%; height:100%; display:flex; align-items:center; justify-content:center;
     font-family:var(--display); color:#fff; text-align:center; line-height:1.05;
-    outline:none; padding:2px; white-space:pre-wrap; word-break:break-word;
+    outline:none; padding:2px; white-space:pre-wrap; word-break:break-word; cursor:text;
+    user-select:text; -webkit-user-select:text;
   }
   .dlayer.image-layer img, .dlayer.ai-layer canvas{ width:100%; height:100%; object-fit:cover; display:block; pointer-events:none; }
   .dlayer .handle{
@@ -1601,7 +1603,10 @@
     el.style.top = (layer.y*100)+'%';
     el.style.width = (layer.w*100)+'%';
     el.style.height = (layer.h*100)+'%';
-    if(layer.type === 'text'){ el.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px'; }
+    if(layer.type === 'text'){
+      var textInner = el.querySelector('.dlayer-text-inner');
+      if(textInner) textInner.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
+    }
   }
 
   function renderLayers(){
@@ -1613,18 +1618,27 @@
       el.style.left = (layer.x*100)+'%'; el.style.top = (layer.y*100)+'%';
       el.style.width = (layer.w*100)+'%'; el.style.height = (layer.h*100)+'%';
 
+      var textInner = null;
       if(layer.type === 'text'){
-        el.contentEditable = 'true';
-        el.spellcheck = false;
-        el.textContent = layer.text || '';
+        // La zone modifiable (contentEditable) est un élément séparé, à
+        // l'intérieur du calque — sans ça, le bouton "supprimer" et les
+        // poignées de redimensionnement (ajoutés comme enfants plus bas)
+        // se retrouvent inclus dans le texte lu par le navigateur, ce qui
+        // ajoutait le symbole "✕" à la fin du texte gravé.
+        textInner = document.createElement('div');
+        textInner.className = 'dlayer-text-inner';
+        textInner.contentEditable = 'true';
+        textInner.spellcheck = false;
+        textInner.textContent = layer.text || '';
         var fam = getFont(layer.fontId || 'cormorant');
-        el.style.fontFamily = fam.family;
-        el.style.fontWeight = layer.bold ? '700' : '500';
-        el.style.fontStyle = layer.italic ? 'italic' : 'normal';
-        el.style.textTransform = layer.caps ? 'uppercase' : 'none';
-        el.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
-        el.addEventListener('input', function(){ layer.text = el.textContent; scheduleEngraveUpdate(); });
-        el.addEventListener('pointerdown', function(e){ e.stopPropagation(); if(layer.id !== selectedLayerId) selectLayer(layer.id); });
+        textInner.style.fontFamily = fam.family;
+        textInner.style.fontWeight = layer.bold ? '700' : '500';
+        textInner.style.fontStyle = layer.italic ? 'italic' : 'normal';
+        textInner.style.textTransform = layer.caps ? 'uppercase' : 'none';
+        textInner.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
+        textInner.addEventListener('input', function(){ layer.text = textInner.textContent; scheduleEngraveUpdate(); });
+        textInner.addEventListener('pointerdown', function(e){ e.stopPropagation(); if(layer.id !== selectedLayerId) selectLayer(layer.id); });
+        el.appendChild(textInner);
       } else if(layer.type === 'image' && layer.previewSrc){
         var img = document.createElement('img');
         img.src = layer.previewSrc;
@@ -1653,6 +1667,7 @@
 
       el.addEventListener('pointerdown', function(e){
         if(e.target.classList.contains('handle') || e.target.classList.contains('del-btn')) return;
+        if(textInner && (e.target === textInner || textInner.contains(e.target))) return; // laisse le clic placer le curseur dans le texte
         if(layer.id !== selectedLayerId) selectLayer(layer.id);
         startDrag(e, layer);
       });
