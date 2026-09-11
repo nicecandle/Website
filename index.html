@@ -540,6 +540,21 @@
 
   .toast-msg{ font-size:12.5px; color:var(--mist-dim); }
 
+  .promo-badges{ display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .promo-badge{
+    display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11px;
+    letter-spacing:.02em; color:var(--ok); background:rgba(143,191,159,0.1);
+    border:1px solid rgba(143,191,159,0.3); border-radius:999px; padding:6px 12px;
+  }
+
+  .cart-breakdown{ margin-top:10px; padding-top:14px; border-top:1px solid var(--line); }
+  .cart-breakdown__row{
+    display:flex; justify-content:space-between; font-family:var(--mono); font-size:12.5px;
+    color:var(--mist); padding:3px 0;
+  }
+  .cart-breakdown__row.discount{ color:var(--ok); }
+  .cart-breakdown__row.grand-total{ color:var(--frost); font-size:14px; font-weight:600; margin-top:6px; padding-top:8px; border-top:1px solid var(--line); }
+
   /* ===================== Collection ===================== */
   .section{ padding:100px 0; }
   .section--tight{ padding-top:0; }
@@ -861,6 +876,7 @@
           </button>
           <span class="toast-msg">Pièce unique, gravée à la commande.</span>
         </div>
+        <div class="promo-badges" id="promoBadges"></div>
       </form>
     </div>
   </div>
@@ -975,8 +991,8 @@
     <p class="cart-empty">Votre panier est vide pour le moment.</p>
   </div>
   <div class="cart-drawer__foot">
-    <div class="cart-total"><span>Total</span><strong id="cartTotal">0,00&nbsp;€</strong></div>
-    <button class="btn btn--flame" style="width:100%; justify-content:center;" id="checkoutBtn">Passer commande</button>
+    <div class="cart-breakdown" id="cartBreakdown"></div>
+    <button class="btn btn--flame" style="width:100%; justify-content:center; margin-top:14px;" id="checkoutBtn">Passer commande</button>
   </div>
 </aside>
 
@@ -1089,6 +1105,37 @@
   ];
   var COLORS = DEFAULT_COLORS;
   var PRICE = 34.00;
+  var SHIPPING_FEE = 5.99;
+  var PROMOS = { p1:false, p2:false, p3:false };
+
+  // Étiquettes fixes des 3 promotions (activées/désactivées depuis l'administration,
+  // mais dont le principe — pourcentage, seuil, périodicité — est fixé ici).
+  var PROMO_LABELS = {
+    p1: '-20% actuellement',
+    p2: 'Livraison offerte dès 3 articles',
+    p3: 'La 5ème bougie offerte !'
+  };
+
+  function updatePriceDisplays(){
+    var formatted = formatPrice(PRICE);
+    var priceTagEl = document.getElementById('priceTag');
+    var btnPriceEl = document.getElementById('btnPrice');
+    if(priceTagEl) priceTagEl.textContent = formatted;
+    if(btnPriceEl) btnPriceEl.textContent = formatted;
+    renderPromoBadges();
+  }
+
+  function renderPromoBadges(){
+    var el = document.getElementById('promoBadges');
+    if(!el) return;
+    var active = [];
+    if(PROMOS.p1) active.push(PROMO_LABELS.p1);
+    if(PROMOS.p2) active.push(PROMO_LABELS.p2);
+    if(PROMOS.p3) active.push(PROMO_LABELS.p3);
+    el.innerHTML = active.map(function(label){
+      return '<span class="promo-badge">✦ '+label+'</span>';
+    }).join('');
+  }
 
   var FONTS = [
     { id:'cormorant',  label:'Cormorant',       family:"'Cormorant', serif" },
@@ -2269,7 +2316,7 @@
   var cartCount = document.getElementById('cartCount');
   var cartDrawer = document.getElementById('cartDrawer');
   var cartBody = document.getElementById('cartBody');
-  var cartTotal = document.getElementById('cartTotal');
+  var cartBreakdown = document.getElementById('cartBreakdown');
   var scrim = document.getElementById('scrim');
 
   function formatPrice(v){ return v.toFixed(2).replace('.', ',') + '\u00A0€'; }
@@ -2320,8 +2367,30 @@
     openCart();
   });
 
+  // Calcule le détail de la commande (sous-total, remises, livraison, total).
+  // Reproduit exactement la logique appliquée côté serveur au moment du
+  // paiement (voir backend/api/orders/create-checkout-session.js) — utilisé
+  // ici uniquement pour l'affichage : le montant réellement prélevé est
+  // toujours recalculé et vérifié par le serveur, jamais déduit de ce que le
+  // navigateur envoie.
+  function computeOrderTotals(){
+    var totalQty = cart.reduce(function(sum, i){ return sum + i.qty; }, 0);
+    var subtotal = totalQty * PRICE;
+    var promo1Discount = PROMOS.p1 ? subtotal * 0.20 : 0;
+    var freeUnits = PROMOS.p3 ? Math.floor(totalQty / 5) : 0;
+    var promo3Discount = freeUnits * PRICE;
+    var totalDiscount = Math.min(promo1Discount + promo3Discount, subtotal);
+    var shippingWaived = PROMOS.p2 && totalQty >= 3;
+    var shipping = shippingWaived ? 0 : SHIPPING_FEE;
+    var grandTotal = (subtotal - totalDiscount) + shipping;
+    return {
+      totalQty: totalQty, subtotal: subtotal,
+      promo1Discount: promo1Discount, promo3Discount: promo3Discount, totalDiscount: totalDiscount,
+      freeUnits: freeUnits, shipping: shipping, shippingWaived: shippingWaived, grandTotal: grandTotal
+    };
+  }
   function cartTotalValue(){
-    return cart.reduce(function(sum, i){ return sum + i.unitPrice * i.qty; }, 0);
+    return computeOrderTotals().grandTotal;
   }
 
   function renderCart(){
@@ -2329,7 +2398,7 @@
     cartCount.classList.toggle('show', cart.length > 0);
     if(cart.length === 0){
       cartBody.innerHTML = '<p class="cart-empty">Votre panier est vide pour le moment.</p>';
-      cartTotal.textContent = '0,00\u00A0€';
+      cartBreakdown.innerHTML = '';
       return;
     }
     cartBody.innerHTML = '';
@@ -2351,7 +2420,19 @@
         '</div>';
       cartBody.appendChild(row);
     });
-    cartTotal.textContent = formatPrice(cartTotalValue());
+
+    var t = computeOrderTotals();
+    var rowsHtml = '<div class="cart-breakdown__row"><span>Sous-total</span><span>'+formatPrice(t.subtotal)+'</span></div>';
+    if(t.promo1Discount > 0){
+      rowsHtml += '<div class="cart-breakdown__row discount"><span>'+escapeHtml(PROMO_LABELS.p1)+'</span><span>−'+formatPrice(t.promo1Discount)+'</span></div>';
+    }
+    if(t.promo3Discount > 0){
+      rowsHtml += '<div class="cart-breakdown__row discount"><span>5ème offerte ('+t.freeUnits+'×)</span><span>−'+formatPrice(t.promo3Discount)+'</span></div>';
+    }
+    rowsHtml += '<div class="cart-breakdown__row"><span>Livraison</span><span>'+(t.shippingWaived ? 'Offerte' : formatPrice(t.shipping))+'</span></div>';
+    rowsHtml += '<div class="cart-breakdown__row grand-total"><span>Total</span><span>'+formatPrice(t.grandTotal)+'</span></div>';
+    cartBreakdown.innerHTML = rowsHtml;
+
     Array.prototype.forEach.call(cartBody.querySelectorAll('.qty-btn'), function(btn){
       btn.addEventListener('click', function(){
         var id = Number(btn.dataset.id);
@@ -2691,6 +2772,14 @@
         }
         if(data.content){
           applyContentOverrides(data.content);
+          if(data.content.basePrice) PRICE = Number(data.content.basePrice) || PRICE;
+          if(data.content.shippingFee !== undefined) SHIPPING_FEE = Number(data.content.shippingFee);
+          if(isNaN(SHIPPING_FEE)) SHIPPING_FEE = 5.99;
+          PROMOS.p1 = data.content.promo1Active === 'true';
+          PROMOS.p2 = data.content.promo2Active === 'true';
+          PROMOS.p3 = data.content.promo3Active === 'true';
+          updatePriceDisplays();
+          renderCart();
         }
       })
       .catch(function(err){
