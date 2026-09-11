@@ -19,7 +19,7 @@ module.exports = async function handler(req, res) {
     const result = [];
     for (const order of orders) {
       const items = await sql`
-        SELECT color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity
+        SELECT color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity, engraving_file
         FROM order_items WHERE order_id = ${order.id}
       `;
       result.push({
@@ -33,7 +33,8 @@ module.exports = async function handler(req, res) {
             text: it.engraved_text,
             motifDesc: it.motif_description,
             unitPrice: Number(it.unit_price),
-            qty: it.quantity
+            qty: it.quantity,
+            engravingFile: it.engraving_file
           };
         })
       });

@@ -44,10 +44,11 @@ module.exports = async function handler(req, res) {
     for (const item of items) {
       await sql`
         INSERT INTO order_items
-          (order_id, color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity)
+          (order_id, color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity, engraving_file)
         VALUES
           (${orderId}, ${item.colorName || 'Personnalisé'}, ${item.colorHex || null}, ${item.colorFill || null}, ${item.colorStroke || null},
-           ${item.text || null}, ${item.motifDesc || null}, ${item.unitPrice}, ${Math.max(1, Math.min(20, Number(item.qty) || 1))})
+           ${item.text || null}, ${item.motifDesc || null}, ${item.unitPrice}, ${Math.max(1, Math.min(20, Number(item.qty) || 1))},
+           ${item.engravingFile || null})
       `;
     }
 
