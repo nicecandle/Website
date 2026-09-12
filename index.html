@@ -2067,6 +2067,72 @@
     this.value = '';
   });
 
+  /* ===================== Suppression de l'arrière-plan (personnes uniquement) =====================
+     Utilise BodyPix (TensorFlow.js), une bibliothèque de détection de
+     personnes qui tourne entièrement dans le navigateur du client — aucune
+     photo n'est envoyée à un serveur pour cette étape. Chargée à la demande
+     (seulement au premier envoi de photo), pour ne pas ralentir le
+     chargement du site pour les visiteurs qui ne l'utilisent pas.
+     Sécurité : si le chargement ou la détection échoue pour une raison
+     quelconque (navigateur trop ancien, bibliothèque indisponible...), la
+     photo d'origine est utilisée telle quelle — cette étape ne bloque jamais
+     l'ajout d'une photo.
+  ============================================================================ */
+  var bodyPixNet = null;
+  var bodyPixLoadPromise = null;
+
+  function loadScript(src){
+    return new Promise(function(resolve, reject){
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function(){ resolve(); };
+      s.onerror = function(){ reject(new Error('load_failed:' + src)); };
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensureBodyPixLoaded(){
+    if(bodyPixLoadPromise) return bodyPixLoadPromise;
+    bodyPixLoadPromise = loadScript('https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js')
+      .then(function(){ return loadScript('https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix@2.2.0/dist/body-pix.min.js'); })
+      .then(function(){ return window.bodyPix.load({ architecture:'MobileNetV1', outputStride:16, multiplier:0.75, quantBytes:2 }); })
+      .then(function(net){ bodyPixNet = net; return net; });
+    return bodyPixLoadPromise;
+  }
+
+  // Retourne une promesse résolue avec un canevas : les personnes détectées
+  // sont conservées telles quelles, le reste est repeint en blanc (pas
+  // transparent — un fond transparent serait ensuite lu comme "noir" par la
+  // conversion en dessin et recréerait un contour épais autour du sujet).
+  function removeBackgroundKeepPeople(img){
+    return ensureBodyPixLoaded().then(function(net){
+      return net.segmentPerson(img, { internalResolution:'medium', segmentationThreshold:0.7 });
+    }).then(function(segmentation){
+      var w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      var ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      var imageData = ctx.getImageData(0, 0, w, h);
+      var d = imageData.data;
+      var mask = segmentation.data;
+      var anyPerson = false;
+      for(var i=0; i<mask.length; i++){
+        if(mask[i] === 1){ anyPerson = true; }
+        else {
+          var o = i*4;
+          d[o]=255; d[o+1]=255; d[o+2]=255; d[o+3]=255;
+        }
+      }
+      if(!anyPerson) return img; // aucune personne détectée : on garde la photo d'origine par sécurité
+      ctx.putImageData(imageData, 0, 0);
+      return canvas;
+    }).catch(function(err){
+      console.warn('Suppression de l\u2019arrière-plan indisponible, photo d\u2019origine conservée.', err);
+      return img; // échec quelconque : on continue avec la photo telle quelle, sans bloquer
+    });
+  }
+
   function handlePhotoFile(file){
     if(ACCEPTED.indexOf(file.type) === -1){
       showToast('Format non pris en charge — utilisez une image JPG, PNG ou WEBP.');
@@ -2081,12 +2147,19 @@
       var dataUrl = e.target.result;
       var img = new Image();
       img.onload = function(){
-        var lineArtCanvas = photoToLineArt(img);
-        var layer = createLayer('image', { imgEl:lineArtCanvas, previewSrc:lineArtCanvas.toDataURL(), x:0.15, y:0.15, w:0.7, h:0.7 });
-        selectLayer(layer.id);
-        updateEngravingTexture();
-        showToast('Photo convertie en dessin — déplacez-la et redimensionnez-la à votre goût.');
-        upgradePhotoViaAPI(dataUrl, layer.id);
+        photoSpinnerEl.classList.add('show');
+        photoStatusTextEl.textContent = 'Suppression de l\u2019arrière-plan…';
+        removeBackgroundKeepPeople(img).then(function(processedImg){
+          var processedDataUrl = (processedImg === img) ? dataUrl : processedImg.toDataURL('image/png');
+          var lineArtCanvas = photoToLineArt(processedImg);
+          var layer = createLayer('image', { imgEl:lineArtCanvas, previewSrc:lineArtCanvas.toDataURL(), x:0.15, y:0.15, w:0.7, h:0.7 });
+          selectLayer(layer.id);
+          updateEngravingTexture();
+          photoSpinnerEl.classList.remove('show');
+          photoStatusTextEl.textContent = '';
+          showToast('Photo convertie en dessin — déplacez-la et redimensionnez-la à votre goût.');
+          upgradePhotoViaAPI(processedDataUrl, layer.id);
+        });
       };
       img.src = dataUrl;
     };
@@ -2147,7 +2220,13 @@
     var inv = new Float32Array(w*h);
     for(var i2=0; i2<w*h; i2++) inv[i2] = 255 - gray[i2];
 
-    var blurRadius = Math.max(2, Math.round(Math.min(w,h) * 0.02));
+    // Rayon de flou : ni trop petit (capterait le grain de peau, les plis de
+    // vêtements et le bruit de fond d'une photo normale comme des "contours",
+    // donnant un résultat en négatif façon bruit électronique), ni trop
+    // grand (étalerait l'effet autour des contours très marqués, créant un
+    // épais contour autour d'un sujet détouré sur fond blanc). Calibré et
+    // vérifié sur les deux cas.
+    var blurRadius = 3;
     var blurred = boxBlur(inv, w, h, blurRadius);
     blurred = boxBlur(blurred, w, h, blurRadius); // deuxième passe = flou plus doux, façon gaussien
 
@@ -2156,12 +2235,24 @@
     var octx = outCanvas.getContext('2d');
     var outData = octx.createImageData(w, h);
 
+    // Compression douce des valeurs très hautes : sans ça, un contour à fort
+    // contraste (silhouette sur fond blanc) ressort beaucoup plus foncé que
+    // les traits fins du visage, ce qui donnait l'impression d'un épais
+    // contour ajouté autour du sujet. Ne touche presque pas aux traits fins
+    // (contraste modéré), mais aplatit fortement les bords très marqués.
+    var COMPRESS_THRESHOLD = 0.35, COMPRESS_FACTOR = 0.15;
+
     for(var idx=0; idx<w*h; idx++){
       var o3 = idx*4;
       var base = gray[idx], blend = blurred[idx];
       var result = blend >= 254.5 ? 255 : Math.min(255, base * 255 / (255 - blend));
       var alpha = 255 - result;
-      alpha = alpha < 6 ? 0 : Math.min(255, alpha * 1.15);
+      alpha = alpha < 8 ? 0 : Math.min(255, alpha * 1.3);
+      var norm = alpha / 255;
+      if(norm > COMPRESS_THRESHOLD){
+        norm = COMPRESS_THRESHOLD + (norm - COMPRESS_THRESHOLD) * COMPRESS_FACTOR;
+      }
+      alpha = Math.max(0, Math.min(255, norm * 255));
       outData.data[o3]=236; outData.data[o3+1]=241; outData.data[o3+2]=245;
       outData.data[o3+3]=Math.round(alpha);
     }
