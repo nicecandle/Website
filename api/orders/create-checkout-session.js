@@ -79,17 +79,18 @@ module.exports = async function handler(req, res) {
       const qty = Math.max(1, Math.min(20, Number(item.qty) || 1));
       await sql`
         INSERT INTO order_items
-          (order_id, color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity, engraving_file)
+          (order_id, color_name, color_hex, color_fill, color_stroke, engraved_text, motif_description, unit_price, quantity, engraving_file, scent_name)
         VALUES
           (${orderId}, ${item.colorName || 'Personnalisé'}, ${item.colorHex || null}, ${item.colorFill || null}, ${item.colorStroke || null},
            ${item.text || null}, ${item.motifDesc || null}, ${basePrice}, ${qty},
-           ${item.engravingFile || null})
+           ${item.engravingFile || null}, ${item.scentName || null})
       `;
     }
 
     // ---------- 5. Lignes Stripe (prix serveur) + livraison ----------
     const line_items = items.map(function (item) {
       var descriptionParts = [];
+      if (item.scentName) descriptionParts.push('Parfum : ' + item.scentName);
       if (item.text) descriptionParts.push('Gravure : « ' + item.text + ' »');
       if (item.motifDesc) descriptionParts.push(item.motifDesc);
       return {
