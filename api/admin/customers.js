@@ -27,7 +27,7 @@ module.exports = async function handler(req, res) {
       const ordersWithItems = [];
       for (const o of orders) {
         const items = await sql`
-          SELECT color_name, engraved_text, motif_description, unit_price, quantity, engraving_file
+          SELECT color_name, engraved_text, motif_description, unit_price, quantity, engraving_file, scent_name
           FROM order_items WHERE order_id = ${o.id}
         `;
         ordersWithItems.push({
@@ -40,6 +40,7 @@ module.exports = async function handler(req, res) {
               colorName: it.color_name,
               text: it.engraved_text,
               motifDesc: it.motif_description,
+              scentName: it.scent_name,
               unitPrice: Number(it.unit_price),
               qty: it.quantity,
               // Le fichier de gravure n'est transmis à l'administration qu'une
