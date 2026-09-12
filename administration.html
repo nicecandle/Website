@@ -815,6 +815,9 @@
           orders.forEach(function(order){
             var itemsHtml = (order.items||[]).map(function(it){
               var line = '<div class="order-mini__item"><span>'+escapeHtml(it.colorName||'')+' × '+it.qty+(it.text ? ' — « '+escapeHtml(it.text)+' »' : '')+'</span><span>'+formatPrice((it.unitPrice||0)*(it.qty||1))+'</span></div>';
+              if(it.scentName){
+                line += '<div style="font-family:var(--mono); font-size:10.5px; color:var(--mist-dim); margin:-2px 0 4px;">Parfum : '+escapeHtml(it.scentName)+'</div>';
+              }
               if(it.engravingFile){
                 line += '<div class="engrave-dl-row"><a class="engrave-dl" href="data:image/svg+xml,'+encodeURIComponent(it.engravingFile)+'" download="gravure-commande-'+order.id+'.svg">⬇ Fichier de gravure (SVG, prêt pour xTool Studio)</a></div>';
               }
