@@ -1,0 +1,130 @@
+  /* ===================== Aperçu réaliste (photo composée) =====================
+     Compose le design du client sur une vraie photo du verre — une photo par
+     teinte. Chaque teinte a sa propre photo et son propre quadrilatère pour
+     la zone de gravure (utile si l'angle de prise de vue diffère légèrement
+     d'une photo à l'autre). Pour l'instant, en l'absence des photos réelles
+     de chaque teinte, toutes les couleurs pointent temporairement vers la
+     même photo de référence, avec le même quadrilatère — à remplacer dès que
+     les photos par teinte sont disponibles (voir REALISTIC_COLOR_DATA
+     ci-dessous : il suffit de changer le "base64" et le "quad" de l'entrée
+     concernée).
+  ============================================================================ */
+  var PLACEHOLDER_REALISTIC_PHOTO_B64 = '__PHOTO_B64__';
+
+  // Quadrilatère par défaut (fractions 0..1 de la largeur/hauteur de la
+  // photo de référence) : les 4 coins de la zone de gravure telle qu'elle
+  // apparaît en perspective sur cette photo précise.
+  var DEFAULT_REALISTIC_ZONE_QUAD = [
+    { x:0.3425, y:0.4780 }, // haut-gauche
+    { x:0.6775, y:0.4780 }, // haut-droit
+    { x:0.6775, y:0.7273 }, // bas-droit
+    { x:0.3425, y:0.7273 }  // bas-gauche
+  ];
+
+  var REALISTIC_COLOR_DATA = {
+    cristal:  { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD },
+    ambre:    { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD },
+    sauge:    { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD },
+    nuit:     { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD },
+    poudre:   { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD },
+    fume:     { base64: PLACEHOLDER_REALISTIC_PHOTO_B64, quad: DEFAULT_REALISTIC_ZONE_QUAD }
+  };
+
+  // Cache des images chargées par teinte : { [colorId]: { img, ready } }
+  var realisticPhotoCache = {};
+
+  function ensureRealisticPhotoLoaded(colorId, callback){
+    var cached = realisticPhotoCache[colorId];
+    if(cached && cached.ready){ callback(); return; }
+    if(cached && !cached.ready){ return; } // déjà en cours de chargement, le onload appellera renderRealisticPreview
+    var entry = REALISTIC_COLOR_DATA[colorId];
+    if(!entry) return;
+    var img = new Image();
+    realisticPhotoCache[colorId] = { img: img, ready: false };
+    img.onload = function(){
+      realisticPhotoCache[colorId].ready = true;
+      callback();
+    };
+    img.src = 'data:image/jpeg;base64,' + entry.base64;
+  }
+
+  // Résout la transformation affine qui envoie le triangle source
+  // (x0,y0),(x1,y1),(x2,y2) sur le triangle destination (u0,v0),(u1,v1),(u2,v2).
+  // Utilisé pour "plaquer" le design carré sur le quadrilatère en perspective
+  // de la zone de gravure (canvas ne sait pas déformer une image en trapèze
+  // directement — on découpe donc en 2 triangles, chacun avec sa propre
+  // transformation affine).
+  function triangleTransform(x0,y0,x1,y1,x2,y2, u0,v0,u1,v1,u2,v2){
+    function det3(m){ return m[0]*(m[4]*m[8]-m[5]*m[7]) - m[1]*(m[3]*m[8]-m[5]*m[6]) + m[2]*(m[3]*m[7]-m[4]*m[6]); }
+    var M = [x0,y0,1, x1,y1,1, x2,y2,1];
+    var D = det3(M);
+    function solve(c0,c1,c2){
+      var Ma=[c0,y0,1, c1,y1,1, c2,y2,1];
+      var Mc=[x0,c0,1, x1,c1,1, x2,c2,1];
+      var Me=[x0,y0,c0, x1,y1,c1, x2,y2,c2];
+      return [det3(Ma)/D, det3(Mc)/D, det3(Me)/D];
+    }
+    var abe = solve(u0,u1,u2);
+    var cdf = solve(v0,v1,v2);
+    return { a:abe[0], c:abe[1], e:abe[2], b:cdf[0], d:cdf[1], f:cdf[2] };
+  }
+
+  function drawTriangleWarped(ctx, img, src, dst){
+    var m = triangleTransform(
+      src[0].x,src[0].y, src[1].x,src[1].y, src[2].x,src[2].y,
+      dst[0].x,dst[0].y, dst[1].x,dst[1].y, dst[2].x,dst[2].y
+    );
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(dst[0].x, dst[0].y); ctx.lineTo(dst[1].x, dst[1].y); ctx.lineTo(dst[2].x, dst[2].y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.setTransform(m.a, m.b, m.c, m.d, m.e, m.f);
+    ctx.drawImage(img, 0, 0);
+    ctx.restore();
+  }
+
+  function renderRealisticPreview(){
+    var canvas = document.getElementById('stageRealCanvas');
+    var pendingEl = document.getElementById('stageRealPending');
+    if(!canvas) return;
+    var colorId = state.color.id;
+    var entry = REALISTIC_COLOR_DATA[colorId];
+    if(!entry) return;
+
+    ensureRealisticPhotoLoaded(colorId, function(){
+      // Si l'utilisateur a changé de couleur entre-temps, on ne dessine que
+      // si c'est toujours la couleur actuellement sélectionnée.
+      if(state.color.id !== colorId) return;
+      var cached = realisticPhotoCache[colorId];
+      if(!cached || !cached.ready) return;
+
+      pendingEl.hidden = true;
+      canvas.hidden = false;
+
+      var img = cached.img;
+      var W = img.naturalWidth, H = img.naturalHeight;
+      canvas.width = W; canvas.height = H;
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(img, 0, 0, W, H);
+
+      if(layers.length > 0){
+        var designSize = 800;
+        var designCanvas = document.createElement('canvas');
+        renderLayersToSquareCanvas(designCanvas, designSize);
+
+        var quadPx = entry.quad.map(function(p){ return { x:p.x*W, y:p.y*H }; });
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply'; // le fond blanc du design devient invisible, seuls les traits ressortent
+        drawTriangleWarped(ctx, designCanvas,
+          [{x:0,y:0}, {x:designSize,y:0}, {x:0,y:designSize}],
+          [quadPx[0], quadPx[1], quadPx[3]]);
+        drawTriangleWarped(ctx, designCanvas,
+          [{x:designSize,y:0}, {x:designSize,y:designSize}, {x:0,y:designSize}],
+          [quadPx[1], quadPx[2], quadPx[3]]);
+        ctx.restore();
+      }
+    });
+  }
+
