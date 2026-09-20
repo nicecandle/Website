@@ -1038,6 +1038,10 @@
 (function(){
   "use strict";
 
+  // Petite fonction utilitaire générale (utilisée notamment par le
+  // glisser-déposer et le redimensionnement des calques de l'éditeur).
+  function clamp(v, mn, mx){ return Math.max(mn, Math.min(mx, v)); }
+
   /* ===================== Data ===================== */
   // Les couleurs, le carrousel et les textes ci-dessous sont les valeurs par
   // défaut, affichées immédiatement au chargement. Juste après (voir
