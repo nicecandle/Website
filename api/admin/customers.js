@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
     const result = [];
     for (const c of customers) {
       const orders = await sql`
-        SELECT id, status, total_amount, created_at FROM orders
+        SELECT id, status, total_amount, tracking_number, created_at FROM orders
         WHERE customer_id = ${c.id} ORDER BY created_at DESC
       `;
       const ordersWithItems = [];
@@ -30,9 +30,16 @@ module.exports = async function handler(req, res) {
           SELECT color_name, engraved_text, motif_description, unit_price, quantity, engraving_file, scent_name
           FROM order_items WHERE order_id = ${o.id}
         `;
+        // Le fichier de gravure n'est transmis à l'administration qu'une
+        // fois la commande réellement payée — "en tampon" jusque-là,
+        // conformément au principe demandé (pas de fabrication sur une
+        // commande non réglée). Payée, en préparation ou expédiée comptent
+        // toutes comme "payée" ici : seule 'pending' bloque encore le fichier.
+        const isPaidOrLater = o.status !== 'pending';
         ordersWithItems.push({
           id: o.id,
           status: o.status,
+          trackingNumber: o.tracking_number,
           total: Number(o.total_amount),
           date: o.created_at,
           items: items.map(function (it) {
@@ -43,10 +50,7 @@ module.exports = async function handler(req, res) {
               scentName: it.scent_name,
               unitPrice: Number(it.unit_price),
               qty: it.quantity,
-              // Le fichier de gravure n'est transmis à l'administration qu'une
-              // fois la commande payée — "en tampon" jusque-là, conformément
-              // au principe demandé (pas de fabrication sur une commande non réglée).
-              engravingFile: o.status === 'paid' ? it.engraving_file : null
+              engravingFile: isPaidOrLater ? it.engraving_file : null
             };
           })
         });
