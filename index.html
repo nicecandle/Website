@@ -425,7 +425,7 @@
   .dlayer.selected{ border-color:var(--flame-2); }
   .dlayer-text-inner{
     width:100%; height:100%; display:flex; align-items:center; justify-content:center;
-    font-family:var(--display); color:#fff; text-align:center; line-height:1.05;
+    font-family:var(--display); color:#fff; text-align:center; line-height:1.22;
     outline:none; padding:2px; white-space:pre-wrap; word-break:break-word; cursor:text;
     user-select:text; -webkit-user-select:text;
   }
@@ -841,6 +841,10 @@
                   <button type="button" class="style-toggle" id="toggleCaps" aria-pressed="false" aria-label="Majuscules"><span style="font-size:11px; letter-spacing:0.5px;">AA</span></button>
                 </div>
               </div>
+              <div class="mini-field">
+                <div class="mini-label">Taille (mm)</div>
+                <input type="number" id="fontSizeInput" class="f-input" min="3" max="30" step="0.5" style="width:76px; padding:8px 10px; font-size:12.5px;">
+              </div>
             </div>
             <button type="button" class="btn btn--ghost" id="deleteLayerBtn" style="padding:9px 16px; font-size:12.5px;">Supprimer cet élément</button>
           </div>
@@ -1154,6 +1158,56 @@
     return FONTS[0];
   }
 
+  // ===== Aide au texte multi-ligne (utilisée par l'éditeur ET les rendus) =====
+  var measureCanvas = document.createElement('canvas');
+  var measureCtx = measureCanvas.getContext('2d');
+
+  function buildFontCss(layer, fontSizePx){
+    var fam = getFont(layer.fontId);
+    var weight = layer.bold ? '700' : '500';
+    var styleStr = layer.italic ? 'italic ' : '';
+    return styleStr + weight + ' ' + fontSizePx + 'px ' + fam.family + ', Georgia, serif';
+  }
+
+  // Découpe le texte en lignes qui tiennent chacune dans maxWidthPx, en
+  // respectant aussi les retours à la ligne tapés par l'utilisateur (\n).
+  function wrapTextLines(ctx, text, maxWidthPx){
+    var paragraphs = String(text || '').split('\n');
+    var lines = [];
+    paragraphs.forEach(function(para){
+      var words = para.split(' ');
+      var current = '';
+      words.forEach(function(word){
+        var test = current ? current + ' ' + word : word;
+        if(current && ctx.measureText(test).width > maxWidthPx){
+          lines.push(current);
+          current = word;
+        } else {
+          current = test;
+        }
+      });
+      lines.push(current);
+    });
+    return lines;
+  }
+
+  // Recalcule la hauteur du bloc de texte pour qu'il s'adapte exactement au
+  // contenu (texte, taille de police, largeur actuelle) — le texte ne doit
+  // jamais être coupé ni déborder, quelle que soit la façon dont le bloc a
+  // été redimensionné. La largeur, elle, reste réglée par l'utilisateur.
+  function autoFitTextLayerHeight(layer){
+    if(layer.type !== 'text') return;
+    var refSize = 800; // taille de référence arbitraire : seul le rapport largeur/hauteur compte ici
+    var fontSizePx = (layer.fontSizeMM / 60) * refSize;
+    var displayText = layer.caps ? (layer.text || '').toUpperCase() : (layer.text || '');
+    measureCtx.font = buildFontCss(layer, fontSizePx);
+    var maxWidthPx = Math.max(1, layer.w * refSize);
+    var lines = wrapTextLines(measureCtx, displayText, maxWidthPx);
+    var lineHeightPx = fontSizePx * 1.22;
+    var totalHeightPx = Math.max(lineHeightPx, lines.length * lineHeightPx);
+    layer.h = clamp(totalHeightPx / refSize, 0.05, 0.95);
+  }
+
   var state = { color: COLORS[0], scent: SCENTS[0] };
   var cart = [];
   var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -1436,19 +1490,19 @@
 
       if(layer.type === 'text' && layer.text){
         ctx.save();
-        var famObj = getFont(layer.fontId);
-        var weight = layer.bold ? '700' : '500';
-        var styleStr = layer.italic ? 'italic ' : '';
-        var fontSizePx = lh * 0.68;
-        ctx.font = styleStr + weight + ' ' + fontSizePx + 'px ' + famObj.family + ', Georgia, serif';
+        var fontSizeMM = layer.fontSizeMM || (layer.h * 60 * 0.68);
+        var fontSizePx = (fontSizeMM / 60) * sizePx;
+        ctx.font = buildFontCss(layer, fontSizePx);
         ctx.fillStyle = '#000000';
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         var displayText = layer.caps ? layer.text.toUpperCase() : layer.text;
-        var metrics = ctx.measureText(displayText);
-        var scaleX = metrics.width > lw ? lw / metrics.width : 1;
-        ctx.translate(lx + lw/2, ly + lh/2);
-        ctx.scale(scaleX, 1);
-        ctx.fillText(displayText, 0, 0);
+        var lines = wrapTextLines(ctx, displayText, lw);
+        var lineHeightPx = fontSizePx * 1.22;
+        var totalH = lines.length * lineHeightPx;
+        var startY = ly + lh/2 - totalH/2 + lineHeightPx/2;
+        lines.forEach(function(line, i){
+          ctx.fillText(line, lx + lw/2, startY + i*lineHeightPx);
+        });
         ctx.restore();
       } else if(layer.type === 'image' && layer.imgEl){
         var tmp = document.createElement('canvas');
@@ -1667,6 +1721,7 @@
       ti.classList.toggle('active', !!layer.italic); ti.setAttribute('aria-pressed', !!layer.italic);
       tb.classList.toggle('active', !!layer.bold); tb.setAttribute('aria-pressed', !!layer.bold);
       tc.classList.toggle('active', !!layer.caps); tc.setAttribute('aria-pressed', !!layer.caps);
+      document.getElementById('fontSizeInput').value = layer.fontSizeMM || 9;
     }
   }
 
@@ -1679,7 +1734,10 @@
     el.style.height = (layer.h*100)+'%';
     if(layer.type === 'text'){
       var textInner = el.querySelector('.dlayer-text-inner');
-      if(textInner) textInner.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
+      if(textInner){
+        var rect = designCanvasEl.getBoundingClientRect();
+        textInner.style.fontSize = Math.max(8, (layer.fontSizeMM/60) * rect.width) + 'px';
+      }
     }
   }
 
@@ -1709,8 +1767,38 @@
         textInner.style.fontWeight = layer.bold ? '700' : '500';
         textInner.style.fontStyle = layer.italic ? 'italic' : 'normal';
         textInner.style.textTransform = layer.caps ? 'uppercase' : 'none';
-        textInner.style.fontSize = Math.max(10, layer.h*280*0.72) + 'px';
-        textInner.addEventListener('input', function(){ layer.text = textInner.textContent; scheduleEngraveUpdate(); });
+        var editorRect = designCanvasEl.getBoundingClientRect();
+        textInner.style.fontSize = Math.max(8, (layer.fontSizeMM/60) * editorRect.width) + 'px';
+        textInner.addEventListener('input', function(){
+          layer.text = textInner.textContent;
+          autoFitTextLayerHeight(layer);
+          updateLayerPosition(layer);
+          scheduleEngraveUpdate();
+        });
+        textInner.addEventListener('keydown', function(e){
+          if(e.key !== 'Enter') return;
+          // Insère un vrai caractère de retour à la ligne dans le texte,
+          // plutôt que de laisser le navigateur créer un <div>/<br> (le
+          // comportement par défaut diffère d'un navigateur à l'autre, et
+          // ne serait pas lu correctement par la suite). Avec un seul
+          // caractère \n dans le texte, le rendu final (gravure, aperçu
+          // réaliste) sait le reproduire exactement de la même façon.
+          e.preventDefault();
+          var sel = window.getSelection();
+          if(!sel.rangeCount) return;
+          var range = sel.getRangeAt(0);
+          range.deleteContents();
+          var textNode = document.createTextNode('\n');
+          range.insertNode(textNode);
+          range.setStartAfter(textNode);
+          range.setEndAfter(textNode);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          layer.text = textInner.textContent;
+          autoFitTextLayerHeight(layer);
+          updateLayerPosition(layer);
+          scheduleEngraveUpdate();
+        });
         textInner.addEventListener('pointerdown', function(e){ e.stopPropagation(); if(layer.id !== selectedLayerId) selectLayer(layer.id); });
         el.appendChild(textInner);
       } else if(layer.type === 'image' && layer.previewSrc){
@@ -1782,7 +1870,8 @@
   function startResize(e, layer, corner){
     var rect = designCanvasEl.getBoundingClientRect();
     resizeState = { layer:layer, corner:corner, startX:e.clientX, startY:e.clientY,
-      origX:layer.x, origY:layer.y, origW:layer.w, origH:layer.h, cw:rect.width, ch:rect.height };
+      origX:layer.x, origY:layer.y, origW:layer.w, origH:layer.h, cw:rect.width, ch:rect.height,
+      aspectRatio: layer.aspectRatio };
     document.addEventListener('pointermove', onResize);
     document.addEventListener('pointerup', onResizeEnd);
   }
@@ -1791,23 +1880,52 @@
     var dx = (e.clientX - resizeState.startX) / resizeState.cw;
     var dy = (e.clientY - resizeState.startY) / resizeState.ch;
     var l = resizeState.layer, c = resizeState.corner, minSize = 0.08;
+    var isText = l.type === 'text';
+    var lockAspect = !isText && resizeState.aspectRatio;
+
+    // Cadre "naïf" tel que le geste de la souris le suggère, comme avant.
+    var newW = resizeState.origW, newH = resizeState.origH, newX = resizeState.origX, newY = resizeState.origY;
     if(c === 'se'){
-      l.w = clamp(resizeState.origW + dx, minSize, 1 - l.x);
-      l.h = clamp(resizeState.origH + dy, minSize, 1 - l.y);
+      newW = clamp(resizeState.origW + dx, minSize, 1 - resizeState.origX);
+      newH = clamp(resizeState.origH + dy, minSize, 1 - resizeState.origY);
     } else if(c === 'sw'){
-      var nw = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
-      l.x = resizeState.origX + resizeState.origW - nw; l.w = nw;
-      l.h = clamp(resizeState.origH + dy, minSize, 1 - l.y);
+      newW = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
+      newX = resizeState.origX + resizeState.origW - newW;
+      newH = clamp(resizeState.origH + dy, minSize, 1 - resizeState.origY);
     } else if(c === 'ne'){
-      l.w = clamp(resizeState.origW + dx, minSize, 1 - l.x);
-      var nh = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
-      l.y = resizeState.origY + resizeState.origH - nh; l.h = nh;
+      newW = clamp(resizeState.origW + dx, minSize, 1 - resizeState.origX);
+      newH = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
+      newY = resizeState.origY + resizeState.origH - newH;
     } else if(c === 'nw'){
-      var nw2 = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
-      l.x = resizeState.origX + resizeState.origW - nw2; l.w = nw2;
-      var nh2 = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
-      l.y = resizeState.origY + resizeState.origH - nh2; l.h = nh2;
+      newW = clamp(resizeState.origW - dx, minSize, resizeState.origX + resizeState.origW);
+      newX = resizeState.origX + resizeState.origW - newW;
+      newH = clamp(resizeState.origH - dy, minSize, resizeState.origY + resizeState.origH);
+      newY = resizeState.origY + resizeState.origH - newH;
     }
+
+    if(isText){
+      // Le bloc de texte ne se redimensionne qu'en largeur — la hauteur
+      // s'ajuste toujours automatiquement au contenu (voir demande : le
+      // texte doit toujours être entièrement visible, jamais coupé).
+      l.w = newW; l.x = newX;
+      autoFitTextLayerHeight(l);
+    } else if(lockAspect){
+      // Verrouille les proportions naturelles de la photo/du motif : jamais
+      // de recadrage ni de déformation, quel que soit le sens dans lequel
+      // on tire un coin. On suit la dimension la plus tirée, et on en
+      // déduit l'autre.
+      var ar = resizeState.aspectRatio;
+      var wChangeRatio = Math.abs(newW/resizeState.origW - 1);
+      var hChangeRatio = Math.abs(newH/resizeState.origH - 1);
+      if(wChangeRatio >= hChangeRatio){ newH = newW / ar; } else { newW = newH * ar; }
+      if(c === 'sw'){ newX = resizeState.origX + resizeState.origW - newW; }
+      else if(c === 'ne'){ newY = resizeState.origY + resizeState.origH - newH; }
+      else if(c === 'nw'){ newX = resizeState.origX + resizeState.origW - newW; newY = resizeState.origY + resizeState.origH - newH; }
+      l.w = newW; l.h = newH; l.x = newX; l.y = newY;
+    } else {
+      l.w = newW; l.h = newH; l.x = newX; l.y = newY;
+    }
+
     updateLayerPosition(l);
     scheduleEngraveUpdate();
   }
@@ -1829,7 +1947,8 @@
   });
 
   document.getElementById('addTextLayerBtn').addEventListener('click', function(){
-    var layer = createLayer('text', { text:'Votre texte', fontId:'cormorant', italic:true, bold:false, caps:false, x:0.12, y:0.4, w:0.76, h:0.2 });
+    var layer = createLayer('text', { text:'Votre texte', fontId:'cormorant', italic:true, bold:false, caps:false, fontSizeMM:9, x:0.12, y:0.4, w:0.76, h:0.2 });
+    autoFitTextLayerHeight(layer);
     selectLayer(layer.id);
     updateEngravingTexture();
     showToast('Élément texte ajouté — déplacez-le et redimensionnez-le à votre goût.');
@@ -1863,6 +1982,7 @@
       var layer = getLayer(selectedLayerId);
       if(!layer || layer.type !== 'text') return;
       layer.fontId = f.id;
+      autoFitTextLayerHeight(layer);
       updateLayerControlsPanel();
       ensureFontLoaded(f, layer);
       renderLayers();
@@ -1912,6 +2032,7 @@
       btn.classList.toggle('active', layer[key]);
       btn.setAttribute('aria-pressed', layer[key]);
       if(key === 'italic' || key === 'bold'){ ensureFontLoaded(getFont(layer.fontId), layer); }
+      autoFitTextLayerHeight(layer);
       renderLayers();
       updateEngravingTexture();
     });
@@ -1919,6 +2040,16 @@
   bindStyleToggle('toggleItalic', 'italic');
   bindStyleToggle('toggleBold', 'bold');
   bindStyleToggle('toggleCaps', 'caps');
+
+  document.getElementById('fontSizeInput').addEventListener('input', function(){
+    var layer = getLayer(selectedLayerId);
+    if(!layer || layer.type !== 'text') return;
+    var mm = clamp(Number(this.value) || 9, 3, 30);
+    layer.fontSizeMM = mm;
+    autoFitTextLayerHeight(layer);
+    updateLayerPosition(layer);
+    scheduleEngraveUpdate();
+  });
 
   /* ---------- + Photo ---------- */
   var layerFileInput = document.getElementById('layerFileInput');
@@ -2016,7 +2147,16 @@
         removeBackgroundKeepPeople(img).then(function(processedImg){
           var processedDataUrl = (processedImg === img) ? dataUrl : processedImg.toDataURL('image/png');
           var lineArtCanvas = photoToLineArt(processedImg);
-          var layer = createLayer('image', { imgEl:lineArtCanvas, previewSrc:lineArtCanvas.toDataURL(), x:0.15, y:0.15, w:0.7, h:0.7 });
+          var ar = lineArtCanvas.width / lineArtCanvas.height;
+          // Cadre initial qui respecte déjà les proportions réelles de la
+          // photo (sinon elle serait recadrée dès sa création, avant même
+          // que l'utilisateur touche aux poignées de redimensionnement).
+          var initW = ar >= 1 ? 0.7 : 0.7 * ar;
+          var initH = ar >= 1 ? 0.7 / ar : 0.7;
+          var layer = createLayer('image', {
+            imgEl:lineArtCanvas, previewSrc:lineArtCanvas.toDataURL(), aspectRatio:ar,
+            x: 0.5 - initW/2, y: 0.5 - initH/2, w: initW, h: initH
+          });
           selectLayer(layer.id);
           updateEngravingTexture();
           photoSpinnerEl.classList.remove('show');
@@ -2207,7 +2347,7 @@
     // Emplacement d'intégration : remplacez ce délai simulé par un appel
     // à votre service de génération d'image (voir note fournie précédemment).
     setTimeout(function(){
-      var layer = createLayer('ai', { aiSeed: hashString(prompt), x:0.15, y:0.15, w:0.7, h:0.7 });
+      var layer = createLayer('ai', { aiSeed: hashString(prompt), aspectRatio: 1, x:0.15, y:0.15, w:0.7, h:0.7 });
       selectLayer(layer.id);
       updateEngravingTexture();
       aiGenerateBtn.disabled = false;
