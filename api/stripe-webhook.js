@@ -6,24 +6,21 @@
 // fiable à elle seule (il peut fermer l'onglet avant la redirection, ou
 // quelqu'un pourrait deviner l'URL de succès sans avoir payé).
 //
-// Envoie aussi un e-mail de notification à l'atelier dès qu'une commande
-// est marquée payée, avec le détail client/commande et le(s) fichier(s) de
-// gravure en pièce jointe.
+// Envoie deux e-mails dès qu'une commande est marquée payée :
+// - à l'atelier (détail complet + fichier de gravure en pièce jointe)
+// - au client (confirmation de commande)
 //
 // Variables d'environnement requises :
 //   STRIPE_SECRET_KEY
 //   STRIPE_WEBHOOK_SECRET — généré par Stripe lors de la création du webhook
 //   DATABASE_URL
-//   RESEND_API_KEY — clé API Resend (resend.com), pour l'e-mail de notification
-//   ORDER_NOTIFICATION_EMAIL — adresse de l'atelier qui doit recevoir ces e-mails
-//   RESEND_FROM_EMAIL — optionnel, adresse d'expédition (doit être sur un
-//     domaine vérifié dans Resend pour pouvoir écrire à ORDER_NOTIFICATION_EMAIL ;
-//     à défaut, utilise onboarding@resend.dev, qui ne peut écrire qu'à l'adresse
-//     de votre propre compte Resend tant qu'aucun domaine n'est vérifié)
+//   RESEND_API_KEY, RESEND_FROM_EMAIL — voir lib/email.js
+//   ORDER_NOTIFICATION_EMAIL — adresse de l'atelier qui reçoit le détail de commande
 
 const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 const { sql } = require('../lib/db');
+const { sendEmail, escapeHtml, formatPrice, customerEmailWrapper } = require('../lib/email');
 
 // Stripe a besoin du corps brut (non parsé) de la requête pour vérifier la
 // signature — on désactive donc le parsing JSON automatique de Vercel.
@@ -40,43 +37,25 @@ function buffer(readable) {
   });
 }
 
-function escapeHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-  });
-}
-
-function formatPrice(n) {
-  return Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '\u00A0€';
-}
-
-// Construit et envoie l'e-mail de notification de commande à l'atelier.
-// N'importe quel souci ici (clé manquante, domaine non vérifié, panne
-// Resend...) est intercepté par l'appelant : une notification manquée ne
-// doit jamais faire échouer la confirmation du paiement lui-même.
-async function sendOrderNotificationEmail(orderId, session) {
-  if (!process.env.RESEND_API_KEY || !process.env.ORDER_NOTIFICATION_EMAIL) {
-    console.warn('Notification e-mail ignorée : RESEND_API_KEY ou ORDER_NOTIFICATION_EMAIL manquant.');
-    return;
-  }
-
+// Charge la commande complète (client + articles) une fois — les deux
+// e-mails (atelier et client) en ont besoin, chacun n'en gardant que ce qui
+// le concerne.
+async function loadFullOrder(orderId) {
   const orderRows = await sql`
     SELECT o.id, o.total_amount, o.created_at, c.email AS customer_email
     FROM orders o JOIN customers c ON c.id = o.customer_id
     WHERE o.id = ${orderId}
   `;
-  if (orderRows.length === 0) return;
-  const order = orderRows[0];
-
+  if (orderRows.length === 0) return null;
   const items = await sql`
     SELECT color_name, engraved_text, motif_description, scent_name, unit_price, quantity, engraving_file
     FROM order_items WHERE order_id = ${orderId}
   `;
+  return { order: orderRows[0], items: items };
+}
 
-  const shipping = session.shipping_details || null;
-  const customerDetails = session.customer_details || null;
-
-  const itemsHtml = items.map(function (it) {
+function itemsTableRows(items, includeEngravingNote) {
+  return items.map(function (it) {
     return '<tr>' +
       '<td style="padding:8px 10px; border-bottom:1px solid #e5e5e5;">' + escapeHtml(it.color_name) + '</td>' +
       '<td style="padding:8px 10px; border-bottom:1px solid #e5e5e5;">' + escapeHtml(it.scent_name || '—') + '</td>' +
@@ -85,6 +64,32 @@ async function sendOrderNotificationEmail(orderId, session) {
       '<td style="padding:8px 10px; border-bottom:1px solid #e5e5e5; text-align:right;">' + formatPrice(it.unit_price) + '</td>' +
       '</tr>';
   }).join('');
+}
+
+function itemsTable(items) {
+  return '<table style="width:100%; border-collapse:collapse; font-size:14px;">' +
+    '<thead><tr style="background:#f5f5f5; text-align:left;">' +
+      '<th style="padding:8px 10px;">Teinte</th><th style="padding:8px 10px;">Parfum</th>' +
+      '<th style="padding:8px 10px;">Gravure</th><th style="padding:8px 10px; text-align:center;">Qté</th>' +
+      '<th style="padding:8px 10px; text-align:right;">Prix unitaire</th>' +
+    '</tr></thead>' +
+    '<tbody>' + itemsTableRows(items) + '</tbody>' +
+  '</table>';
+}
+
+// E-mail à l'atelier : tout le détail utile à la fabrication, avec le(s)
+// fichier(s) de gravure en pièce jointe.
+async function sendWorkshopNotification(orderId, session) {
+  if (!process.env.ORDER_NOTIFICATION_EMAIL) {
+    console.warn('ORDER_NOTIFICATION_EMAIL manquant — notification atelier non envoyée.');
+    return;
+  }
+  const full = await loadFullOrder(orderId);
+  if (!full) return;
+  const { order, items } = full;
+
+  const shipping = session.shipping_details || null;
+  const customerDetails = session.customer_details || null;
 
   const shippingHtml = shipping
     ? '<p style="margin:4px 0;"><strong>' + escapeHtml(shipping.name || '') + '</strong><br>' +
@@ -103,14 +108,7 @@ async function sendOrderNotificationEmail(orderId, session) {
       '<h3 style="margin-bottom:4px;">Adresse de livraison</h3>' +
       shippingHtml +
       '<h3 style="margin-bottom:4px;">Articles</h3>' +
-      '<table style="width:100%; border-collapse:collapse; font-size:14px;">' +
-        '<thead><tr style="background:#f5f5f5; text-align:left;">' +
-          '<th style="padding:8px 10px;">Teinte</th><th style="padding:8px 10px;">Parfum</th>' +
-          '<th style="padding:8px 10px;">Gravure</th><th style="padding:8px 10px; text-align:center;">Qté</th>' +
-          '<th style="padding:8px 10px; text-align:right;">Prix unitaire</th>' +
-        '</tr></thead>' +
-        '<tbody>' + itemsHtml + '</tbody>' +
-      '</table>' +
+      itemsTable(items) +
       '<p style="text-align:right; font-size:16px; margin-top:14px;"><strong>Total : ' + formatPrice(order.total_amount) + '</strong></p>' +
       '<p style="color:#777; font-size:13px;">' +
         (items.some(function (it) { return it.engraving_file; })
@@ -129,23 +127,34 @@ async function sendOrderNotificationEmail(orderId, session) {
     })
     .filter(Boolean);
 
-  const { Resend } = require('resend');
-  const resend = new Resend(process.env.RESEND_API_KEY);
-  const fromAddress = process.env.RESEND_FROM_EMAIL || 'Ice Candle Cannes <onboarding@resend.dev>';
-
-  const result = await resend.emails.send({
-    from: fromAddress,
-    to: [process.env.ORDER_NOTIFICATION_EMAIL],
+  await sendEmail({
+    to: process.env.ORDER_NOTIFICATION_EMAIL,
     subject: 'Nouvelle commande #' + order.id + ' — ' + formatPrice(order.total_amount),
     html: html,
-    attachments: attachments.length ? attachments : undefined
+    attachments: attachments
   });
+}
 
-  if (result && result.error) {
-    console.error('Échec envoi e-mail de notification (commande', order.id, ') :', result.error);
-  } else {
-    console.log('E-mail de notification envoyé pour la commande', order.id);
-  }
+// E-mail au client : confirmation chaleureuse, sans détail technique interne
+// (pas de fichier de gravure — inutile pour le client, réservé à l'atelier).
+async function sendCustomerConfirmation(orderId) {
+  const full = await loadFullOrder(orderId);
+  if (!full) return;
+  const { order, items } = full;
+
+  const html = customerEmailWrapper(
+    '<p>Merci pour votre commande !</p>' +
+    '<p>Nous avons bien reçu votre paiement pour la commande <strong>#' + order.id + '</strong>, et votre bougie va être préparée avec soin.</p>' +
+    itemsTable(items) +
+    '<p style="text-align:right; font-size:16px; margin-top:14px;"><strong>Total : ' + formatPrice(order.total_amount) + '</strong></p>' +
+    '<p>Vous serez prévenu(e) par e-mail à chaque étape de la préparation de votre commande.</p>'
+  );
+
+  await sendEmail({
+    to: order.customer_email,
+    subject: 'Votre commande Ice Candle Cannes #' + order.id + ' est confirmée',
+    html: html
+  });
 }
 
 module.exports = async function handler(req, res) {
@@ -173,13 +182,18 @@ module.exports = async function handler(req, res) {
         console.error('Erreur mise à jour commande', orderId, err);
       }
 
-      // La notification e-mail est secondaire au paiement lui-même : un
-      // souci ici ne doit jamais faire échouer la réponse au webhook (Stripe
-      // réessaierait sinon indéfiniment un événement déjà bien traité).
+      // Les e-mails sont secondaires au paiement lui-même : un souci ici ne
+      // doit jamais faire échouer la réponse au webhook (Stripe réessaierait
+      // sinon indéfiniment un événement déjà bien traité).
       try {
-        await sendOrderNotificationEmail(orderId, session);
+        await sendWorkshopNotification(orderId, session);
       } catch (err) {
-        console.error('Erreur envoi e-mail de notification pour la commande', orderId, err);
+        console.error('Erreur envoi notification atelier pour la commande', orderId, err);
+      }
+      try {
+        await sendCustomerConfirmation(orderId);
+      } catch (err) {
+        console.error('Erreur envoi confirmation client pour la commande', orderId, err);
       }
     } else {
       console.warn('checkout.session.completed reçu sans metadata.order_id — session', session.id);
