@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const orders = await sql`
-      SELECT id, status, total_amount, created_at FROM orders
+      SELECT id, status, total_amount, tracking_number, created_at FROM orders
       WHERE customer_id = ${customer.id} ORDER BY created_at DESC
     `;
     const result = [];
@@ -25,6 +25,7 @@ module.exports = async function handler(req, res) {
       result.push({
         id: order.id,
         status: order.status,
+        trackingNumber: order.tracking_number,
         total: Number(order.total_amount),
         date: order.created_at,
         items: items.map(function (it) {
