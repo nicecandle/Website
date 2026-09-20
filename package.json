@@ -9,6 +9,7 @@
   "dependencies": {
     "stripe": "^22.0.0",
     "@neondatabase/serverless": "^1.1.0",
-    "bcryptjs": "^3.0.3"
+    "bcryptjs": "^3.0.3",
+    "resend": "^6.0.0"
   }
 }
