@@ -2603,12 +2603,16 @@
     }
     var html = '';
     orders.forEach(function(order){
-      var statusLabel = order.status === 'paid' ? 'Payée' : order.status === 'pending' ? 'En attente de paiement' : order.status;
-      var statusStyle = order.status === 'paid' ? '' : ' style="background:rgba(244,161,92,0.14); color:var(--flame-2);"';
+      var statusMeta = {
+        pending:   { label:'En attente de paiement', style:' style="background:rgba(244,161,92,0.14); color:var(--flame-2);"' },
+        paid:      { label:'Payée', style:'' },
+        preparing: { label:'En préparation', style:' style="background:rgba(244,161,92,0.14); color:var(--flame-2);"' },
+        shipped:   { label:'Expédiée' + (order.trackingNumber ? ' · n\u00b0 '+escapeHtml(order.trackingNumber) : ''), style:'' }
+      }[order.status] || { label: order.status, style:'' };
       html += '<div class="order-card">'+
         '<div class="order-card__head">'+
           '<span class="order-card__date">'+formatDate(order.date)+'</span>'+
-          '<span class="order-status"'+statusStyle+'>'+statusLabel+'</span>'+
+          '<span class="order-status"'+statusMeta.style+'>'+statusMeta.label+'</span>'+
         '</div>';
       order.items.forEach(function(item, idx){
         html +=

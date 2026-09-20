@@ -35,10 +35,15 @@ CREATE TABLE IF NOT EXISTS orders (
   id                SERIAL PRIMARY KEY,
   customer_id       INTEGER NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
   stripe_session_id TEXT UNIQUE,
-  status            TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'cancelled'
+  status            TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'paid' | 'preparing' | 'shipped' | 'cancelled'
   total_amount      NUMERIC(10,2) NOT NULL DEFAULT 0,
+  tracking_number   TEXT,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Si la table orders existait déjà (site déployé avant cette mise à jour),
+-- la ligne ci-dessous ajoute la colonne manquante sans rien casser.
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS tracking_number TEXT;
 
 CREATE TABLE IF NOT EXISTS order_items (
   id                SERIAL PRIMARY KEY,

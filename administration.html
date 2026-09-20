@@ -823,17 +823,46 @@
               }
               return line;
             }).join('');
-            var statusLabel = order.status === 'paid' ? 'Payée (Stripe)' : order.status === 'pending' ? 'En attente de paiement' : order.status;
-            var statusColor = order.status === 'paid' ? 'var(--ok)' : 'var(--flame-2)';
+            var statusMeta = {
+              pending:   { label:'En attente de paiement', color:'var(--flame-2)' },
+              paid:      { label:'Payée (Stripe)', color:'var(--ok)' },
+              preparing: { label:'En préparation', color:'var(--flame-2)' },
+              shipped:   { label:'Expédiée' + (order.trackingNumber ? ' · n\u00b0 '+escapeHtml(order.trackingNumber) : ''), color:'var(--ok)' }
+            }[order.status] || { label: order.status, color:'var(--mist-dim)' };
+            var actionsHtml = '';
+            if(order.status === 'paid'){
+              actionsHtml = '<button type="button" class="btn btn--ghost advance-status-btn" data-order="'+order.id+'" data-next="preparing" style="padding:6px 12px; font-size:11.5px; margin-top:6px;">Marquer en préparation</button>';
+            } else if(order.status === 'preparing'){
+              actionsHtml =
+                '<div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">'+
+                  '<input type="text" class="f-input tracking-input" data-order="'+order.id+'" placeholder="N\u00b0 de suivi (optionnel)" style="flex:1; min-width:140px; padding:6px 10px; font-size:11.5px;">'+
+                  '<button type="button" class="btn btn--ghost advance-status-btn" data-order="'+order.id+'" data-next="shipped" style="padding:6px 12px; font-size:11.5px;">Marquer comme expédiée</button>'+
+                '</div>';
+            }
             ordersEl.innerHTML +=
               '<div class="order-mini">'+
                 '<div class="order-mini__head"><span>'+formatDate(order.date)+'</span><span>#'+String(order.id).slice(-6)+'</span></div>'+
-                '<div style="font-family:var(--mono); font-size:10.5px; color:'+statusColor+'; margin-bottom:6px;">'+statusLabel+'</div>'+
+                '<div style="font-family:var(--mono); font-size:10.5px; color:'+statusMeta.color+'; margin-bottom:6px;">'+statusMeta.label+'</div>'+
                 itemsHtml+
                 '<div class="order-mini__total"><span>Total</span><span>'+formatPrice(order.total||0)+'</span></div>'+
+                actionsHtml+
               '</div>';
           });
         }
+        Array.prototype.forEach.call(ordersEl.querySelectorAll('.advance-status-btn'), function(btn){
+          btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            var orderId = btn.dataset.order, nextStatus = btn.dataset.next;
+            var trackingInput = ordersEl.querySelector('.tracking-input[data-order="'+orderId+'"]');
+            var trackingNumber = trackingInput ? trackingInput.value.trim() : '';
+            btn.disabled = true; btn.textContent = 'Envoi…';
+            adminFetch('/order-status', { method:'POST', body:{ orderId:orderId, status:nextStatus, trackingNumber:trackingNumber || undefined } }).then(function(res){
+              if(!res.ok){ showToast((res.data && res.data.error) || 'Impossible de mettre à jour le statut.'); btn.disabled = false; btn.textContent = nextStatus === 'preparing' ? 'Marquer en préparation' : 'Marquer comme expédiée'; return; }
+              showToast('Statut mis à jour — client prévenu par e-mail.');
+              renderCustomers();
+            });
+          });
+        });
         card.querySelector('.customer-head').addEventListener('click', function(){
           ordersEl.classList.toggle('show');
         });
