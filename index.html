@@ -2317,6 +2317,64 @@
     });
   }
 
+  /* ---------- Motif IA : appel réel au service de génération ---------- */
+  var MOTIF_API_ENDPOINT = '/api/generate-motif';
+
+  function upgradeMotifViaAPI(prompt, layerId){
+    aiSpinner.classList.add('show');
+    aiStatusText.textContent = 'Génération du motif par IA…';
+
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timeoutId = setTimeout(function(){ if(controller) controller.abort(); }, 45000);
+
+    fetch(MOTIF_API_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt }),
+      signal: controller ? controller.signal : undefined
+    })
+    .then(function(resp){
+      clearTimeout(timeoutId);
+      if(!resp.ok) throw new Error('http_' + resp.status);
+      return resp.json();
+    })
+    .then(function(data){
+      if(!data || !data.imageUrl) throw new Error('no_image');
+      var apiImg = new Image();
+      apiImg.crossOrigin = 'anonymous'; // nécessaire pour pouvoir dessiner l'image sur le canevas
+      apiImg.onload = function(){
+        var layer = getLayer(layerId);
+        if(!layer) return; // le calque a peut-être été supprimé entre-temps
+        // Contrairement à photo-to-lineart.js (qui renvoie déjà un rendu
+        // façon "trait clair sur fond sombre"), le modèle de génération
+        // texte→image renvoie une image normale (fond blanc, traits noirs)
+        // — on la fait donc passer par le même algorithme de conversion en
+        // dessin que les photos importées, pour un style cohérent avec le
+        // reste du site.
+        var lineArtCanvas = photoToLineArt(apiImg);
+        layer.type = 'image';
+        layer.imgEl = lineArtCanvas;
+        layer.previewSrc = lineArtCanvas.toDataURL();
+        layer.aspectRatio = lineArtCanvas.width / lineArtCanvas.height;
+        if(layer.id === selectedLayerId) renderLayers();
+        updateEngravingTexture();
+        aiSpinner.classList.remove('show');
+        aiStatusText.textContent = '';
+        showToast('Motif généré par IA à partir de votre description.');
+      };
+      apiImg.onerror = function(){ throw new Error('img_load_failed'); };
+      apiImg.src = data.imageUrl;
+    })
+    .catch(function(err){
+      clearTimeout(timeoutId);
+      aiSpinner.classList.remove('show');
+      aiStatusText.textContent = '';
+      // Échec silencieux : le motif de démonstration déjà affiché reste
+      // valable, la personnalisation du client n'est jamais bloquée.
+      console.warn('Service de génération IA indisponible, motif de démonstration conservé.', err);
+    });
+  }
+
   /* ---------- + Motif IA ---------- */
   var aiPromptPanel = document.getElementById('aiPromptPanel');
   var aiPrompt = document.getElementById('aiPrompt');
@@ -2344,18 +2402,17 @@
     aiSpinner.classList.add('show');
     aiStatusText.textContent = 'Génération en cours…';
 
-    // Emplacement d'intégration : remplacez ce délai simulé par un appel
-    // à votre service de génération d'image (voir note fournie précédemment).
+    // Le motif local (gratuit, instantané) s'affiche tout de suite ; la
+    // vraie génération par IA vient ensuite le remplacer une fois prête
+    // (voir upgradeMotifViaAPI juste au-dessus).
     setTimeout(function(){
       var layer = createLayer('ai', { aiSeed: hashString(prompt), aspectRatio: 1, x:0.15, y:0.15, w:0.7, h:0.7 });
       selectLayer(layer.id);
       updateEngravingTexture();
       aiGenerateBtn.disabled = false;
-      aiSpinner.classList.remove('show');
-      aiStatusText.textContent = '';
       aiPromptPanel.hidden = true;
       aiPrompt.value = '';
-      showToast('Motif généré à partir de votre description — mode démonstration.');
+      upgradeMotifViaAPI(prompt, layer.id);
     }, 900);
   });
 
